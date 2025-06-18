@@ -1,0 +1,60 @@
+# The master blueprint for our entire application.
+
+services:
+  # Our custom-built PostgreSQL Database Service
+  postgres_db:
+    build: ./postgres
+    container_name: postgres_database
+    environment:
+      - POSTGRES_DB=wayline
+      - POSTGRES_USER=admin
+      - POSTGRES_PASSWORD=admin
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      # Mount our init script into the special init directory.
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d wayline"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # The pgAdmin web interface for managing the database
+  postgres_ui:
+    image: dpage/pgadmin4
+    container_name: postgres_ui
+    environment:
+      - PGADMIN_DEFAULT_EMAIL=admin@example.com
+      - PGADMIN_DEFAULT_PASSWORD=admin
+    ports:
+      - "8080:80"
+    depends_on:
+      - postgres_db
+
+  # Our custom backend API Server
+  api:
+    build: .
+    container_name: wayline_api
+    ports:
+      - "5000:5000"
+    volumes:
+      - .:/app
+    depends_on:
+      postgres_db:
+        condition: service_healthy
+
+  # The high-performance routing engine
+  routing_engine:
+    image: osrm/osrm-backend:latest
+    container_name: osrm_router
+    ports:
+      - "5001:5000"
+    volumes:
+      - ./data:/data
+    # This command assumes the .osrm files have been pre-processed and shared.
+    command: osrm-routed --algorithm mld /data/southern-zone-latest.osrm
+
+volumes:
+  postgres_data:
