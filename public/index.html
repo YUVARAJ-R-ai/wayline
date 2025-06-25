@@ -7,33 +7,53 @@
     <link rel="stylesheet" href="index.css" />
 </head>
 <body>
-    <!-- Search bar HTML (no changes) -->
-    <div class="search-container">
-        <input type="text" id="search-input" placeholder="Search for a location...">
-        <button id="search-button">Search</button>
-        <button id="clear-button">Clear</button>
+
+    <!-- This is the main map container -->
+    <div id="map"></div>
+
+    <!-- This is the main control panel for routing -->
+    <div class="control-panel">
+        <div class="wrapper">
+            <label for="from-input">From:</label>
+            <input type="text" id="from-input" placeholder="Type an address or click map...">
+            <button id="from-button">Search</button>
+        </div>
+        <div class="wrapper">
+            <label for="to-input">To:</label>
+            <input type="text" id="to-input" placeholder="Type an address or click map...">
+            <button id="to-button">Search</button>
+        </div>
+        <div class="wrapper main-actions">
+            <button id="get-route-button" disabled>Get Route</button>
+            <button id="clear-button">Clear All</button>
+        </div>
     </div>
 
-    <div id="map"></div>
+    <!-- JavaScript libraries and our custom logic -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script>
-        // --- Map Initialization (no changes) ---
+        // --- Map Initialization ---
         const map = L.map('map').setView([13.08, 80.27], 12);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             maxZoom: 19,
             attribution: '© <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>'
         }).addTo(map);
 
-        // --- State variables (no changes) ---
+        // --- DOM Element References ---
+        const fromInput = document.getElementById('from-input');
+        const toInput = document.getElementById('to-input');
+        const getRouteBtn = document.getElementById('get-route-button');
+
+        // --- State Management ---
         let startPoint = null;
         let endPoint = null;
         let startMarker = null;
         let endMarker = null;
         let routeLayer = null;
 
-        // --- NEW: Centralized Cleanup Function ---
-        // This function resets the entire routing state.
-        function clearRoute() {
+        // --- Core Functions ---
+
+        function clearAll() {
             if (startMarker) map.removeLayer(startMarker);
             if (endMarker) map.removeLayer(endMarker);
             if (routeLayer) map.removeLayer(routeLayer);
@@ -42,93 +62,111 @@
             startMarker = null;
             endMarker = null;
             routeLayer = null;
+            fromInput.value = '';
+            toInput.value = '';
+            getRouteBtn.disabled = true;
         }
 
-        // --- Routing Function (no changes) ---
+        function updateRouteButtonState() {
+            getRouteBtn.disabled = !(startPoint && endPoint);
+        }
+
+        function setPoint(type, latlng, address) {
+            if (type === 'start') {
+                if (startMarker) map.removeLayer(startMarker);
+                startPoint = latlng;
+                startMarker = L.marker(latlng).addTo(map)
+                    .bindPopup(`<b>Start Point</b><br>${address}`).openPopup();
+                fromInput.value = address;
+            } else if (type === 'end') {
+                if (endMarker) map.removeLayer(endMarker);
+                endPoint = latlng;
+                endMarker = L.marker(latlng).addTo(map)
+                    .bindPopup(`<b>End Point</b><br>${address}`).openPopup();
+                toInput.value = address;
+            }
+            updateRouteButtonState();
+        }
+
+        // **UPDATED**: Performs a geocode search using the /api/geocode endpoint
+        async function performSearch(type) {
+            const inputElement = (type === 'start') ? fromInput : toInput;
+            const query = inputElement.value;
+            if (!query) return;
+
+            try {
+                // This now calls your backend API instead of showing an alert
+                const response = await fetch(`/api/geocode?q=${encodeURIComponent(query)}`);
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(`Location not found: ${errorText}`);
+                }
+                const data = await response.json();
+                const latlng = { lat: data.lat, lng: data.lng };
+                setPoint(type, latlng, data.address);
+                map.flyTo(latlng, 14);
+            } catch (error) {
+                alert(error.message);
+            }
+        }
+        
         async function getRoute() {
+            if (!startPoint || !endPoint) return;
+            if (routeLayer) map.removeLayer(routeLayer);
+
             const from = `${startPoint.lng},${startPoint.lat}`;
             const to = `${endPoint.lng},${endPoint.lat}`;
             const apiUrl = `/api/route?from=${from}&to=${to}`;
+            
             try {
                 const response = await fetch(apiUrl);
                 if (!response.ok) throw new Error('Network response was not ok');
                 const routeGeoJSON = await response.json();
-                routeLayer = L.geoJSON(routeGeoJSON, { style: { color: '#007bff', weight: 5 } }).addTo(map);
-                map.fitBounds(routeLayer.getBounds());
+                routeLayer = L.geoJSON(routeGeoJSON, { style: { color: '#007bff', weight: 6, opacity: 0.7 } }).addTo(map);
+                map.fitBounds(routeLayer.getBounds(), { padding: [50, 50] });
             } catch (error) {
                 console.error('Error fetching route:', error);
                 alert("Could not calculate the route.");
             }
         }
 
-        // --- MODIFIED: Search now integrates with routing ---
-        async function searchLocation() {
-            const query = document.getElementById('search-input').value;
-            if (!query) return;
+        // --- Event Listeners ---
 
-            const response = await fetch(`/api/geocode?q=${encodeURIComponent(query)}`);
-            if (response.ok) {
-                const data = await response.json();
-                
-                // 1. Clear any previous route
-                clearRoute();
+        document.getElementById('from-button').addEventListener('click', () => performSearch('start'));
+        document.getElementById('to-button').addEventListener('click', () => performSearch('end'));
 
-                // 2. Set the searched location as the start point
-                startPoint = { lat: data.lat, lng: data.lng };
-                startMarker = L.marker(startPoint).addTo(map)
-                    .bindPopup(`<b>Start Point</b><br>${data.address}`).openPopup();
+        fromInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') performSearch('start'); });
+        toInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') performSearch('end'); });
 
-                // 3. Zoom to the new start point
-                map.flyTo(startPoint, 15);
-                
-                // The next click on the map will now set the end point.
+        getRouteBtn.addEventListener('click', getRoute);
+        document.getElementById('clear-button').addEventListener('click', clearAll);
 
-            } else {
-                alert('Location not found.');
-            }
-        }
-        
-        // Add event listeners for the search bar (no changes)
-        document.getElementById('search-button').addEventListener('click', searchLocation);
-        document.getElementById('search-input').addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') searchLocation();
-        });
-        document.getElementById('clear-button').addEventListener('click', clearRoute);
-
-
-        // --- MODIFIED: Map Click Handler is now simpler and more robust ---
+        // **UPDATED**: Map click now performs reverse-geocoding using the /api/reverse-geocode endpoint
         map.on('click', async function(e) {
-            // If a full route is already displayed, clear it.
-            // The code will then continue below to set the new start point in the same click.
-            if (startPoint && endPoint) {
-                clearRoute();
-            }
-
-            // Fetch address for the clicked point
-            const lat = e.latlng.lat;
-            const lng = e.latlng.lng;
-            let address = `Lat: ${lat.toFixed(5)}, Lng: ${lng.toFixed(5)}`; // Fallback text
+            let address = `Lat: ${e.latlng.lat.toFixed(5)}, Lng: ${e.latlng.lng.toFixed(5)}`; // Fallback address
+            
             try {
-                const response = await fetch(`/api/reverse-geocode?lat=${lat}&lng=${lng}`);
+                // Call the backend to get the address for the clicked coordinates
+                const response = await fetch(`/api/reverse-geocode?lat=${e.latlng.lat}&lng=${e.latlng.lng}`);
                 if (response.ok) {
                     const data = await response.json();
                     address = data.address;
                 }
             } catch (error) {
-                console.error("Reverse geocoding failed", error);
+                console.error("Reverse geocoding failed, using coordinates as fallback.", error);
             }
 
             if (!startPoint) {
-                // First click (or first after a clear): Set start point
-                startPoint = e.latlng;
-                startMarker = L.marker(startPoint).addTo(map)
-                    .bindPopup(`<b>Start Point</b><br>${address}`).openPopup();
+                setPoint('start', e.latlng, address);
+            } else if (!endPoint) {
+                setPoint('end', e.latlng, address);
+                // Automatically get route after the second point is set by clicking
+                if (startPoint) {
+                    getRoute(); 
+                }
             } else {
-                // Second click: Set end point and get route
-                endPoint = e.latlng;
-                endMarker = L.marker(endPoint).addTo(map)
-                    .bindPopup(`<b>End Point</b><br>${address}`).openPopup();
-                getRoute();
+                clearAll();
+                setPoint('start', e.latlng, address);
             }
         });
     </script>
