@@ -81,74 +81,112 @@ Once the `osm2pgsql` command is finished, your full application is running.
 
 ---
 
-# Team Git Workflow Guide 🚀
+# 🚀 Project Workflow Guidelines
 
-## 📋 Overview
-This guide helps team members stay synchronized with the main branch and avoid common Git conflicts during collaboration.
+Welcome to the project! This document explains how we collaborate using Git branches to keep our main branch stable and clean.
 
-## 🔄 Daily Workflow
+---
 
-### Step 1: Pull Latest Changes
-Before starting any work, always pull the latest changes from the remote repository:
+## 🔁 Branching Strategy
+
+| Branch | Status | Purpose | Access |
+|--------|--------|---------|--------|
+| `main` | ✅ **Protected branch** | Contains only reviewed and production-ready code | Only maintainer (via PR) |
+| `updates` | ✏️ **Working branch** | Used by all team members to add new features, updates, or bug fixes | All collaborators |
+
+### Key Points:
+- **DO NOT push directly** to the `main` branch
+- All collaborative work happens on the `updates` branch
+- Only reviewed code gets merged into `main` via Pull Requests
+
+---
+
+## 🛠️ How to Contribute
+
+### 1. Clone the Repository (First Time Setup)
 
 ```bash
-git pull origin main
+git clone https://github.com/<your-username>/<your-repo>.git
+cd <your-repo>
 ```
 
-This command pulls the latest changes from the remote `main` branch into your local copy.
-
-### Step 2: Check Your Current Branch
-Verify you're on the correct branch before pulling:
+### 2. Switch to the `updates` Branch
 
 ```bash
-git branch
+git checkout updates
 ```
 
-The current branch will be highlighted with an asterisk (*).
+If `updates` branch is not available locally yet:
 
-## 🧠 Important Notes
+```bash
+git fetch
+git checkout updates
+```
 
-### Branch Requirements
-- **You must be on the same branch** (`main`) for `git pull origin main` to work smoothly
-- If you're on a different branch, switch to main first:
-  ```bash
-  git checkout main
-  ```
+### 3. Stay Updated with Latest Changes
 
-### Handling Local Changes
-If you have **uncommitted local changes** when pulling:
+**Before starting any work**, always pull the latest changes:
 
-1. **Check your status first:**
-   ```bash
-   git status
-   ```
+```bash
+git pull origin updates
+```
 
-2. **Options to handle local changes:**
-   - **Commit your changes first:**
-     ```bash
-     git add .
-     git commit -m "Your commit message"
-     git pull origin main
-     ```
-   
-   - **Stash your changes temporarily:**
-     ```bash
-     git stash
-     git pull origin main
-     git stash pop  # Reapply your stashed changes
-     ```
+#### 🧠 Important Notes:
+- **You must be on the `updates` branch** for this to work smoothly
+- Check your current branch with: `git branch`
+- If you have **local uncommitted changes**, Git might show a merge conflict
 
-### Merge Conflicts
-If Git shows a **merge conflict**, you'll need to:
-1. Open the conflicted files
-2. Resolve the conflicts manually
-3. Stage the resolved files: `git add <filename>`
-4. Complete the merge: `git commit`
+#### Handling Local Changes Before Pulling:
 
-## 🧰 Advanced Options
+**Option A: Commit your changes first**
+```bash
+git add .
+git commit -m "Your work in progress"
+git pull origin updates
+```
 
-### Auto-update for Branch Switchers
-If you frequently switch between branches and want to ensure you have the latest updates:
+**Option B: Stash your changes temporarily**
+```bash
+git stash
+git pull origin updates
+git stash pop  # Reapply your stashed changes
+```
+
+### 4. Make Your Changes
+
+- Add or edit files as needed
+- Use `git add` and `git commit` to stage and save your changes
+
+```bash
+git add .
+git commit -m "Your message describing the update"
+```
+
+### 5. Push to the `updates` Branch
+
+```bash
+git push origin updates
+```
+
+---
+
+## 🔄 Merging to `main`
+
+Only the **project maintainer** can merge `updates` into `main` via a **Pull Request (PR)** after review.
+
+This ensures:
+- Code is stable and tested
+- Everyone agrees on what goes into `main`
+- Bugs are minimized in production
+- Proper code review process is followed
+
+---
+
+## 🧰 Advanced Workflow Tips
+
+### For Frequent Branch Switchers
+
+If you switch between branches often, ensure you have the latest updates:
 
 ```bash
 git fetch --all
@@ -156,44 +194,100 @@ git pull
 ```
 
 ### Quick Status Check
+
 Always check your repository status before major operations:
 
 ```bash
 git status
 ```
 
+### Check Current Branch
+
+Verify which branch you're currently on:
+
+```bash
+git branch
+```
+
+The current branch will be highlighted with an asterisk (*).
+
+---
+
+## 🔧 Troubleshooting Common Issues
+
+### "Your branch is behind 'origin/updates'"
+**Solution:** Run `git pull origin updates`
+
+### "You have unmerged paths"
+**Solution:** 
+1. Resolve merge conflicts in the affected files
+2. Stage resolved files: `git add <filename>`
+3. Complete the merge: `git commit`
+
+### "Please commit your changes or stash them before you merge"
+**Solution:** Either commit your changes or use `git stash` as shown above
+
+### Merge Conflicts
+If Git shows a **merge conflict**:
+1. Open the conflicted files
+2. Look for conflict markers (`<<<<<<<`, `=======`, `>>>>>>>`)
+3. Resolve conflicts manually by choosing the correct code
+4. Remove conflict markers
+5. Stage resolved files: `git add <filename>`
+6. Complete the merge: `git commit`
+
+---
+
+## 📋 Daily Workflow Checklist
+
+- [ ] Switch to `updates` branch: `git checkout updates`
+- [ ] Pull latest changes: `git pull origin updates`
+- [ ] Make your changes
+- [ ] Stage changes: `git add .`
+- [ ] Commit with descriptive message: `git commit -m "Description"`
+- [ ] Push to updates: `git push origin updates`
+
+---
+
 ## 📞 When to Reach Out
 
-Contact the team lead if:
-- Your teammate is using a **different branch** than `main`
-- You're using a **PR-based workflow** (feature branches)
+Contact the team lead or create an issue if:
 - You encounter persistent merge conflicts
+- You want to add a major new feature
 - You're unsure about any step in this process
+- You need help with Git commands
+- You accidentally pushed to the wrong branch
 
-## 🔧 Troubleshooting
+---
 
-### Common Issues
-
-**"Your branch is behind 'origin/main'"**
-- Solution: Run `git pull origin main`
-
-**"You have unmerged paths"**
-- Solution: Resolve merge conflicts, then `git add` and `git commit`
-
-**"Please commit your changes or stash them before you merge"**
-- Solution: Either commit your changes or use `git stash` as shown above
-
-## 📚 Quick Reference
+## 📚 Quick Reference Commands
 
 | Command | Purpose |
 |---------|---------|
 | `git status` | Check current state of your repository |
 | `git branch` | See all branches and current branch |
-| `git pull origin main` | Pull latest changes from main branch |
+| `git checkout updates` | Switch to updates branch |
+| `git pull origin updates` | Pull latest changes from updates branch |
+| `git add .` | Stage all changes |
+| `git commit -m "message"` | Commit staged changes |
+| `git push origin updates` | Push changes to remote updates branch |
 | `git stash` | Temporarily save uncommitted changes |
 | `git stash pop` | Restore stashed changes |
 | `git fetch --all` | Download all remote branch updates |
 
 ---
 
-💡 **Remember:** When in doubt, check `git status` first and don't hesitate to ask for help!
+## ✅ Summary
+
+- **`main` branch**: Final, stable codebase - Only maintainer access via PR
+- **`updates` branch**: Active development - All team members collaborate here
+- **Always pull before starting work** to avoid conflicts
+- **Create issues or ask questions** before major changes
+
+**Remember:** When in doubt, check `git status` first and don't hesitate to ask for help!
+
+Happy coding! 💻🔥
+
+---
+
+*Need to customize this README? Replace `<your-username>` and `<your-repo>` with your actual GitHub repository details.*
