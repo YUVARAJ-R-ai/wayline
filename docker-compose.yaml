@@ -52,7 +52,7 @@ services:
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - POSTGRES_HOST=postgres_db # The host is still the service name
       - OPENCAGE_API_KEY=${OPENCAGE_API_KEY}
-
+    command: ["sh", "-c", "npm install && npm start"]
   # The high-performance routing engine
   routing_engine:
     image: osrm/osrm-backend:latest
