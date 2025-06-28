@@ -7,14 +7,26 @@
     <link rel="stylesheet" href="index.css" />
 </head>
 <body>
-    <div class="search-container">
-        <input type="text" id="search-input" placeholder="Search for a location...">
-        <button id="search-button">Search</button>
-        <button id="clear-button">Clear</button>
-    </div>
 
     <div id="map"></div>
-    <div id="distance-display" style="position:absolute;bottom:10px;right:10px;background:white;padding:8px;border-radius:5px;z-index:1000;display:none;box-shadow:0 1px 5px rgba(0,0,0,0.65);"></div>
+
+    <div class="control-panel">
+        <div class="wrapper">
+            <label for="from-input">From:</label>
+            <input type="text" id="from-input" placeholder="Type an address or click map...">
+            <button id="from-button">Search</button>
+        </div>
+        <div class="wrapper">
+            <label for="to-input">To:</label>
+            <input type="text" id="to-input" placeholder="Type an address or click map...">
+            <button id="to-button">Search</button>
+        </div>
+        <div class="wrapper main-actions">
+            <button id="get-route-button" disabled>Get Route</button>
+            <button id="clear-button">Clear All</button>
+        </div>
+        <div id="distance-display" style="display:none;font-weight:bold;margin-top:8px;"></div>
+    </div>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script>
@@ -24,84 +36,10 @@
             attribution: '© <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>'
         }).addTo(map);
 
-        let startPoint = null;
-        let endPoint = null;
-        let startMarker = null;
-        let endMarker = null;
-        let routeLayer = null;
-
-        const distanceDisplay = document.getElementById("distance-display");
-
-        function clearRoute() {
-            if (startMarker) map.removeLayer(startMarker);
-            if (endMarker) map.removeLayer(endMarker);
-            if (routeLayer) map.removeLayer(routeLayer);
-            startPoint = null;
-            endPoint = null;
-            startMarker = null;
-            endMarker = null;
-            routeLayer = null;
-            distanceDisplay.style.display = "none";
-        }
-
-        async function getRoute() {
-            const from = `${startPoint.lng},${startPoint.lat}`;
-            const to = `${endPoint.lng},${endPoint.lat}`;
-            const apiUrl = `/api/route?from=${from}&to=${to}`;
-            try {
-                const response = await fetch(apiUrl);
-                if (!response.ok) throw new Error('Network response was not ok');
-                const routeGeoJSON = await response.json();
-                routeLayer = L.geoJSON(routeGeoJSON, { style: { color: '#007bff', weight: 5 } }).addTo(map);
-                map.fitBounds(routeLayer.getBounds());
-
-                const coords = routeGeoJSON.coordinates;
-                let distance = 0;
-                for (let i = 1; i < coords.length; i++) {
-                    const from = L.latLng(coords[i - 1][1], coords[i - 1][0]);
-                    const to = L.latLng(coords[i][1], coords[i][0]);
-                    distance += from.distanceTo(to);
-                }
-                distanceDisplay.innerText = `Distance: ${(distance / 1000).toFixed(2)} km`;
-                distanceDisplay.style.display = "block";
-
-            } catch (error) {
-                console.error('Error fetching route:', error);
-                alert("Could not calculate the route.");
-            }
-        }
-
-        async function searchLocation() {
-            const query = document.getElementById('search-input').value;
-            if (!query) return;
-
-            try {
-                const response = await fetch(`/api/geocode?q=${encodeURIComponent(query)}`);
-                const data = await response.json();
-
-                if (data.error || !data.lat || !data.lon) {
-                    alert('Location not found.');
-                    return;
-                }
-
-                clearRoute();
-
-                startPoint = { lat: parseFloat(data.lat), lng: parseFloat(data.lon) };
-                startMarker = L.marker(startPoint, { icon: blueIcon }).addTo(map)
-                    .bindPopup(`<b>Start Point</b><br>${data.address || query}`).openPopup();
-
-                map.flyTo(startPoint, 15);
-            } catch (err) {
-                console.error("Error fetching geocode:", err);
-                alert('Failed to search location.');
-            }
-        }
-
-        document.getElementById('search-button').addEventListener('click', searchLocation);
-        document.getElementById('search-input').addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') searchLocation();
-        });
-        document.getElementById('clear-button').addEventListener('click', clearRoute);
+        const fromInput = document.getElementById('from-input');
+        const toInput = document.getElementById('to-input');
+        const getRouteBtn = document.getElementById('get-route-button');
+        const distanceDisplay = document.getElementById('distance-display');
 
         const blueIcon = new L.Icon({
             iconUrl: 'https://maps.google.com/mapfiles/ms/icons/blue-dot.png',
@@ -117,36 +55,124 @@
             popupAnchor: [0, -32]
         });
 
-        map.on('click', async function(e) {
-            if (startPoint && endPoint) {
-                clearRoute();
-            }
+        let startPoint = null;
+        let endPoint = null;
+        let startMarker = null;
+        let endMarker = null;
+        let routeLayer = null;
 
-            const lat = e.latlng.lat;
-            const lng = e.latlng.lng;
-            let address = `Lat: ${lat.toFixed(5)}, Lng: ${lng.toFixed(5)}`;
+        function clearAll() {
+            if (startMarker) map.removeLayer(startMarker);
+            if (endMarker) map.removeLayer(endMarker);
+            if (routeLayer) map.removeLayer(routeLayer);
+            startPoint = null;
+            endPoint = null;
+            startMarker = null;
+            endMarker = null;
+            routeLayer = null;
+            fromInput.value = '';
+            toInput.value = '';
+            getRouteBtn.disabled = true;
+            distanceDisplay.style.display = 'none';
+        }
+
+        function updateRouteButtonState() {
+            getRouteBtn.disabled = !(startPoint && endPoint);
+        }
+
+        function setPoint(type, latlng, address) {
+            if (type === 'start') {
+                if (startMarker) map.removeLayer(startMarker);
+                startPoint = latlng;
+                startMarker = L.marker(latlng, { icon: blueIcon }).addTo(map)
+                    .bindPopup(`<b>Start Point</b><br>${address}`).openPopup();
+                fromInput.value = address;
+            } else if (type === 'end') {
+                if (endMarker) map.removeLayer(endMarker);
+                endPoint = latlng;
+                endMarker = L.marker(latlng, { icon: redIcon }).addTo(map)
+                    .bindPopup(`<b>End Point</b><br>${address}`).openPopup();
+                toInput.value = address;
+            }
+            updateRouteButtonState();
+        }
+
+        async function performSearch(type) {
+            const inputElement = (type === 'start') ? fromInput : toInput;
+            const query = inputElement.value;
+            if (!query) return;
 
             try {
-                const response = await fetch(`/api/reverse-geocode?lat=${lat}&lng=${lng}`);
+                const response = await fetch(`/api/geocode?q=${encodeURIComponent(query)}`);
+                if (!response.ok) throw new Error('Location not found');
+                const data = await response.json();
+                const latlng = { lat: data.lat, lng: data.lng };
+                setPoint(type, latlng, data.address);
+                map.flyTo(latlng, 14);
+            } catch (error) {
+                alert(error.message);
+            }
+        }
+
+        async function getRoute() {
+            if (!startPoint || !endPoint) return;
+            if (routeLayer) map.removeLayer(routeLayer);
+
+            const from = `${startPoint.lng},${startPoint.lat}`;
+            const to = `${endPoint.lng},${endPoint.lat}`;
+            const apiUrl = `/api/route?from=${from}&to=${to}`;
+
+            try {
+                const response = await fetch(apiUrl);
+                if (!response.ok) throw new Error('Network response was not ok');
+                const routeGeoJSON = await response.json();
+                routeLayer = L.geoJSON(routeGeoJSON, { style: { color: '#007bff', weight: 6, opacity: 0.7 } }).addTo(map);
+                map.fitBounds(routeLayer.getBounds(), { padding: [50, 50] });
+
+                // Calculate distance (in km) from coordinates
+                const coords = routeGeoJSON.coordinates;
+                let totalDistance = 0;
+                for (let i = 1; i < coords.length; i++) {
+                    const p1 = L.latLng(coords[i - 1][1], coords[i - 1][0]);
+                    const p2 = L.latLng(coords[i][1], coords[i][0]);
+                    totalDistance += p1.distanceTo(p2);
+                }
+                distanceDisplay.innerText = `Distance: ${(totalDistance / 1000).toFixed(2)} km`;
+                distanceDisplay.style.display = 'block';
+
+            } catch (error) {
+                console.error('Error fetching route:', error);
+                alert("Could not calculate the route.");
+            }
+        }
+
+        document.getElementById('from-button').addEventListener('click', () => performSearch('start'));
+        document.getElementById('to-button').addEventListener('click', () => performSearch('end'));
+        fromInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') performSearch('start'); });
+        toInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') performSearch('end'); });
+        getRouteBtn.addEventListener('click', getRoute);
+        document.getElementById('clear-button').addEventListener('click', clearAll);
+
+        map.on('click', async function(e) {
+            let address = `Lat: ${e.latlng.lat.toFixed(5)}, Lng: ${e.latlng.lng.toFixed(5)}`;
+            try {
+                const response = await fetch(`/api/reverse-geocode?lat=${e.latlng.lat}&lng=${e.latlng.lng}`);
                 if (response.ok) {
                     const data = await response.json();
-                    if (data.address) {
-                        address = data.address;
-                    }
+                    if (data.address) address = data.address;
                 }
             } catch (error) {
                 console.error("Reverse geocoding failed", error);
             }
 
             if (!startPoint) {
-                startPoint = e.latlng;
-                startMarker = L.marker(startPoint, { icon: blueIcon }).addTo(map)
-                    .bindPopup(`<b>Start Point</b><br>${address}`).openPopup();
-            } else {
-                endPoint = e.latlng;
-                endMarker = L.marker(endPoint, { icon: redIcon }).addTo(map)
-                    .bindPopup(`<b>End Point</b><br>${address}`).openPopup();
+                setPoint('start', e.latlng, address);
+            } else if (!endPoint) {
+                setPoint('end', e.latlng, address);
                 getRoute();
+            } else {
+                clearAll();
+                setPoint('start', e.latlng, address);
             }
         });
     </script>
