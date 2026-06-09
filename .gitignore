@@ -1,8 +1,36 @@
-# Dependencies
-/node_modules
+# ===== Dependencies =====
+# Matches node_modules at any depth (root, api-gateway/, etc.)
+node_modules/
 
-# Environment variables
+# ===== Environment / secrets =====
 .env
+.env.*
+!.env.example
 
-/data/*.pbf
-/data/*.osrm*
+# ===== Large geodata — NEVER commit (multi-GB OSRM/PBF files & archives) =====
+# This is what made `git add .` hang: ~10 GB of binaries under data/.
+/data/
+
+# ===== Knowledge-graph output =====
+/graphify-out/
+
+# ===== Frontend is a SEPARATE git repo (wayline-nextjs), tracked independently =====
+# Ignoring it here prevents a broken embedded-repo/gitlink in this repo.
+/frontend/
+
+# ===== Build / cache artifacts =====
+.next/
+dist/
+build/
+*.tsbuildinfo
+
+# ===== Logs =====
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ===== OS / editor cruft =====
+.DS_Store
+Thumbs.db
+*.swp

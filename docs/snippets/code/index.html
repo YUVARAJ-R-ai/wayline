@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Wayline Maps</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="index.css" />
+</head>
+<body>
+    <!-- HTML structure remains the same -->
+    <div id="top-bar">
+        <input type="text" id="search-input" placeholder="Search for a location...">
+        <button id="search-button" title="Search">🔍</button>
+        <button id="directions-button" title="Directions">➔</button>
+    </div>
+
+    <div id="routing-panel" class="hidden">
+        <div class="input-group">
+            <label for="from-input">From:</label>
+            <input type="text" id="from-input" placeholder="Start address or click map">
+            <button class="map-select-btn" data-type="from" title="Select starting point on map">📍</button>
+        </div>
+        <div class="input-group">
+            <label for="to-input">To:</label>
+            <input type="text" id="to-input" placeholder="Destination or click map">
+            <button class="map-select-btn" data-type="to" title="Select destination on map">📍</button>
+        </div>
+        <div class="button-group">
+            <button id="get-route-button">Get Route</button>
+            <button id="clear-button">Clear</button>
+        </div>
+        <div id="status-message"></div>
+    </div>
+
+    <div id="map"></div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        // --- Get DOM Elements (no changes) ---
+        const searchInput = document.getElementById('search-input');
+        const searchButton = document.getElementById('search-button');
+        const directionsButton = document.getElementById('directions-button');
+        const routingPanel = document.getElementById('routing-panel');
+        const fromInput = document.getElementById('from-input');
+        const toInput = document.getElementById('to-input');
+        const getRouteBtn = document.getElementById('get-route-button');
+        const clearBtn = document.getElementById('clear-button');
+        const statusMessage = document.getElementById('status-message');
+        const mapSelectBtns = document.querySelectorAll('.map-select-btn');
+
+        // --- Define Base Map Layers (no changes) ---
+        const osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19,
+            attribution: '© <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+        });
+
+        const satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+            maxZoom: 19,
+            attribution: 'Tiles © Esri'
+        });
+        
+        const baseMaps = {
+            "Streets": osmLayer,
+            "Satellite": satelliteLayer
+        };
+
+        // --- Map Initialization with Layers Control (MODIFIED) ---
+        const map = L.map('map', {
+            layers: [osmLayer], // Default layer
+            zoomControl: false  // This line disables the +/- zoom buttons
+        }).setView([13.08, 80.27], 12);
+        
+        L.control.layers(baseMaps).addTo(map);
+
+        // --- State Variables (no changes) ---
+        let startPoint = null;
+        let endPoint = null;
+        let startMarker = null;
+        let endMarker = null;
+        let routeLayer = null;
+        let selectionMode = null; 
+        let singleMarker = null; 
+
+        // --- ALL OTHER JAVASCRIPT FUNCTIONS REMAIN THE SAME ---
+        // (clearAll, getAddress, setPoint, geocodeAddress, searchLocation, etc.)
+        function updateStatus(message) { statusMessage.textContent = message; }
+
+        function clearAll() {
+            if (startMarker) map.removeLayer(startMarker);
+            if (endMarker) map.removeLayer(endMarker);
+            if (routeLayer) map.removeLayer(routeLayer);
+            if (singleMarker) map.removeLayer(singleMarker);
+
+            routingPanel.classList.add('hidden');
+            startPoint = endPoint = startMarker = endMarker = routeLayer = selectionMode = singleMarker = null;
+            
+            fromInput.value = toInput.value = searchInput.value = '';
+            updateStatus('');
+            map.getContainer().style.cursor = '';
+        }
+
+        async function getAddress(lat, lng) {
+            const response = await fetch(`/api/reverse-geocode?lat=${lat}&lng=${lng}`);
+            if (response.ok) return (await response.json()).address;
+            return `Lat: ${lat.toFixed(5)}, Lng: ${lng.toFixed(5)}`;
+        }
+        
+        async function setPoint(latlng, type) {
+            const address = await getAddress(latlng.lat, latlng.lng);
+            if (type === 'from') {
+                if (startMarker) map.removeLayer(startMarker);
+                startPoint = latlng;
+                fromInput.value = address;
+                startMarker = L.marker(startPoint).addTo(map).bindPopup(`<b>Start</b><br>${address}`).openPopup();
+            } else if (type === 'to') {
+                if (endMarker) map.removeLayer(endMarker);
+                endPoint = latlng;
+                toInput.value = address;
+                endMarker = L.marker(endPoint).addTo(map).bindPopup(`<b>Destination</b><br>${address}`).openPopup();
+            }
+            if (singleMarker) { map.removeLayer(singleMarker); singleMarker = null; }
+            selectionMode = null;
+            map.getContainer().style.cursor = '';
+            updateStatus('');
+        }
+
+        async function geocodeAddress(query) {
+            if (!query) return null;
+            const response = await fetch(`/api/geocode?q=${encodeURIComponent(query)}`);
+            if (response.ok) return await response.json();
+            return null;
+        }
+
+        async function searchLocation() {
+            const query = searchInput.value;
+            if (!query) return;
+
+            clearAll(); 
+
+            const result = await geocodeAddress(query);
+            if (result) {
+                const latlng = { lat: result.lat, lng: result.lng };
+                singleMarker = L.marker(latlng).addTo(map)
+                    .bindPopup(`<b>${result.address}</b>`).openPopup();
+                map.flyTo(latlng, 15);
+            } else {
+                alert('Location not found.');
+            }
+        }
+        
+        function toggleRoutingPanel() {
+            routingPanel.classList.toggle('hidden');
+            if (!routingPanel.classList.contains('hidden') && singleMarker) {
+                const latlng = singleMarker.getLatLng();
+                setPoint(latlng, 'to');
+            }
+        }
+
+        async function calculateAndDisplayRoute() {
+            if (routeLayer) map.removeLayer(routeLayer);
+            
+            if (!startPoint) {
+                const result = await geocodeAddress(fromInput.value);
+                if (result) await setPoint({ lat: result.lat, lng: result.lng }, 'from');
+                else { alert('Starting location not found.'); return; }
+            }
+
+            if (!endPoint) {
+                const result = await geocodeAddress(toInput.value);
+                if (result) await setPoint({ lat: result.lat, lng: result.lng }, 'to');
+                else { alert('Destination not found.'); return; }
+            }
+
+            const apiUrl = `/api/route?from=${startPoint.lng},${startPoint.lat}&to=${endPoint.lng},${endPoint.lat}`;
+            try {
+                updateStatus('Calculating...');
+                const response = await fetch(apiUrl);
+                if (!response.ok) throw new Error('Route not found');
+                const routeGeoJSON = await response.json();
+                routeLayer = L.geoJSON(routeGeoJSON, { style: { color: '#007bff', weight: 5 } }).addTo(map);
+                map.fitBounds(routeLayer.getBounds().pad(0.1));
+                updateStatus('Route found!');
+            } catch (error) {
+                alert("Could not calculate the route.");
+                updateStatus('');
+            }
+        }
+
+        // --- Event Listeners (no changes) ---
+        searchButton.addEventListener('click', searchLocation);
+        searchInput.addEventListener('keypress', e => { if (e.key === 'Enter') searchLocation(); });
+        directionsButton.addEventListener('click', toggleRoutingPanel);
+        
+        getRouteBtn.addEventListener('click', calculateAndDisplayRoute);
+        clearBtn.addEventListener('click', clearAll);
+
+        mapSelectBtns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                selectionMode = btn.dataset.type;
+                updateStatus(`Click map to select ${selectionMode} point`);
+                map.getContainer().style.cursor = 'crosshair';
+            });
+        });
+
+        map.on('click', e => { if (selectionMode) setPoint(e.latlng, selectionMode); });
+    </script>
+</body>
+</html>

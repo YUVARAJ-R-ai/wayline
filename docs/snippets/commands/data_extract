@@ -1,0 +1,3 @@
+ogr2ogr -f "GPKG" road_network.gpkg /vsizip/road_network.zip/"Road Network"/Road_Network.shp -t_srs EPSG:3857 -nlt PROMOTE_TO_MULTI
+
+ogr2ogr -f "GPKG" Chennai_road.gpkg GCRoad_Network.shp -t_srs EPSG:3857 -nlt PROMOTE_TO_MULTI

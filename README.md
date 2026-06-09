@@ -1,293 +1,464 @@
+# Wayline — Geospatial API Platform
 
-# **Wayline Geospatial API - Project Documentation & Setup Guide**
+Wayline is a self-hosted maps and routing platform — think of it as our own private version of Google Maps. It lets users search for locations, calculate driving routes, and access map data through an API.
 
-### **1. Project Overview**
-
-**Wayline** is a high-performance, self-hosted geospatial API designed to provide core mapping functionalities, primarily routing and custom data queries.
-
-The architecture is based on **microservices**. Instead of one large program, our application is a system of coordinated, specialized services, each running in its own isolated **Docker container**. This architecture is designed for performance, scalability, and effective team collaboration.
-
-### **2. System Architecture**
-
-| Service | Docker Container Name | Technology | Purpose |
-| :--- | :--- | :--- | :--- |
-| **Custom Database**| `postgres_database` | Custom Docker Image (PostGIS + osm2pgsql) | The "source of truth" for our custom OpenStreetMap data. |
-| **Database UI** | `postgres_ui` | pgAdmin 4 | A web-based interface for easily viewing and managing the database. |
-| **Routing Engine**| `osrm_router` | OSRM (C++) | A dedicated, high-speed engine for calculating routes using pre-processed data. |
-| **API Server** | `wayline_api` | Node.js + Express | The central "manager" of our application. The frontend only talks to this API, which then delegates tasks to the appropriate backend service. |
-
-### **3. Prerequisites (For All Team Members)**
-
-Before you begin, every team member must have the following software installed on their computer:
-
-1.  **Git:** For version control. [Download Git](https://git-scm.com/downloads).
-2.  **Docker Desktop:** To run our containerized services. [Download Docker Desktop](https://www.docker.com/products/docker-desktop). Make sure the Docker application is running after installation.
+> **New to the team?** Read this whole file top to bottom before you do anything else. It will save you hours of confusion.
 
 ---
 
-### **4. One-Time Project Setup for New Developers**
+## Table of Contents
 
-Follow these steps to get a complete, running instance of the project on your local machine.
+1. [How the Project is Structured](#1-how-the-project-is-structured)
+2. [How the App Works](#2-how-the-app-works)
+3. [Prerequisites — Install These First](#3-prerequisites--install-these-first)
+4. [First-Time Setup](#4-first-time-setup)
+5. [Running the App](#5-running-the-app)
+6. [Daily Git Workflow](#6-daily-git-workflow)
+7. [Using the Project Board](#7-using-the-project-board)
+8. [Branch Rules](#8-branch-rules)
+9. [Common Errors and Fixes](#9-common-errors-and-fixes)
+10. [Quick Reference Cheat Sheet](#10-quick-reference-cheat-sheet)
 
-#### **Setup Step 1: Get the Project Code**
+---
 
-Clone the repository from your team's central location (e.g., GitHub).
+## 1. How the Project is Structured
 
-```bash
-git clone <your-team-repository-url>
-cd wayline
+The project is split into **two separate GitHub repositories**. You need to clone both.
+
+| Repository | What's inside | Who works here |
+|------------|--------------|----------------|
+| [`wayline`](https://github.com/YUVARAJ-R-ai/wayline) | Backend API, database setup, Docker config | Backend team |
+| [`wayline-nextjs`](https://github.com/YUVARAJ-R-ai/wayline-nextjs) | Frontend (Next.js web app) | Frontend team |
+
+Both repos need to be running at the same time for the full app to work.
+
+---
+
+## 2. How the App Works
+
+The app is made up of **5 services** that all run together using Docker. You don't run them separately — Docker handles everything.
+
+```
+Browser / Frontend (port 8080)
+        │
+        ▼
+  API Gateway (port 3000)    ← your Express backend — the brain
+     /        \
+    ▼           ▼
+PostgreSQL    OSRM Router     ← database and routing engine
+(port 5432)   (port 5001)
+
+pgAdmin (port 8888)           ← visual tool to inspect the database
 ```
 
-#### **Setup Step 2: Obtain the Processed Routing Data**
+| Service | What it does | URL when running |
+|---------|-------------|-----------------|
+| `wayline_frontend` | The web app users see | http://localhost:8080 |
+| `wayline_api_gateway` | Handles all API requests | http://localhost:3000 |
+| `postgres_database` | Stores user data and map data | (internal) |
+| `osrm_router` | Calculates driving routes | http://localhost:5001 |
+| `postgres_ui` | Visual database browser (pgAdmin) | http://localhost:8888 |
 
-The routing engine requires large, pre-processed data files (`.osrm` files) that are not stored in Git. The designated "Data Lead" is responsible for generating these once and sharing them with the team.
+---
 
-1.  Download the shared data archive (e.g., `osrm_data.tar.gz`) from the team's shared drive (e.g., Google Drive, S3).
-2.  Place the downloaded `osrm_data.tar.gz` file in the root of the `wayline` project folder.
-3.  Extract the archive. This will create and populate the `data/` directory with all necessary `.pbf` and `.osrm` files.
-    ```bash
-    tar -xzvf osrm_data.tar.gz
-    ```
+## 3. Prerequisites — Install These First
 
-#### **Setup Step 3: Build and Start the Services**
+Install all of these before cloning the repo. If you already have them, skip ahead.
 
-This command reads the `docker-compose.yml` file, builds your custom PostgreSQL image, and starts all the services.
+### Git
+Version control — how we track and share code changes.
+- Download: https://git-scm.com/downloads
+- Verify: `git --version` (should print a version number)
+
+### Docker Desktop
+Runs all the services in isolated containers. **You need this running before starting the app.**
+- Download: https://www.docker.com/products/docker-desktop
+- After installing, open Docker Desktop and wait for it to show "Engine running"
+- Verify: `docker --version`
+
+### Node.js (v18 or higher)
+Required for the API gateway and frontend.
+- Download: https://nodejs.org (choose the LTS version)
+- Verify: `node --version` and `npm --version`
+
+### Setting up SSH for GitHub
+This lets you push and pull code without typing your password every time.
+
+1. Generate an SSH key (skip if you already have one):
+   ```bash
+   ssh-keygen -t ed25519 -C "your@email.com"
+   # Press Enter 3 times to accept defaults
+   ```
+2. Copy your public key:
+   ```bash
+   cat ~/.ssh/id_ed25519.pub
+   # Copy the entire output
+   ```
+3. Add it to GitHub: https://github.com/settings/ssh/new
+4. Test it: `ssh -T git@github.com`
+   - You should see: `Hi your-username! You've successfully authenticated`
+
+---
+
+## 4. First-Time Setup
+
+Do these steps **once** when you first join the project. After that, just use the daily workflow.
+
+### Step 1 — Clone the repositories
+
+Open a terminal and run:
 
 ```bash
+# Clone the backend repo
+git clone git@github.com:YUVARAJ-R-ai/wayline.git
+cd wayline
+
+# Clone the frontend repo (in a separate folder)
+git clone git@github.com:YUVARAJ-R-ai/wayline-nextjs.git
+```
+
+### Step 2 — Switch to the working branch
+
+**Important:** Never work on `main`. Switch to `updates` immediately after cloning.
+
+```bash
+cd wayline
+git checkout updates
+```
+
+### Step 3 — Tell Git how to handle updates (one-time config)
+
+This prevents a common error you will hit otherwise:
+
+```bash
+git config pull.rebase false
+```
+
+### Step 4 — Create the environment file
+
+The app needs a `.env` file with credentials. Ask the project lead (Yuvaraj) for the values, then create the file:
+
+```bash
+# Inside the wayline folder
+cp .env.example .env
+# Then open .env and fill in the values Yuvaraj gives you
+```
+
+The file needs these values:
+```
+POSTGRES_DB=
+POSTGRES_USER=
+POSTGRES_PASSWORD=
+PGADMIN_DEFAULT_EMAIL=
+PGADMIN_DEFAULT_PASSWORD=
+OPENCAGE_API_KEY=
+```
+
+### Step 5 — Get the map data
+
+The routing engine needs a large data file (~7 GB) that is **not stored in Git** (it's too big).
+
+Ask Yuvaraj to share the `osrm-data.tar.gz` file from the team drive. Once you have it:
+
+```bash
+# Place the file in the wayline folder, then extract it
+cd wayline
+tar -xzvf data/osrm-data.tar.gz -C data/
+```
+
+This creates the `data/osrm-data/` folder the routing engine needs.
+
+### Step 6 — Install backend dependencies
+
+```bash
+cd wayline/api-gateway
+npm install
+cd ..
+```
+
+---
+
+## 5. Running the App
+
+Once setup is complete, starting the app is one command:
+
+```bash
+# Inside the wayline folder, with Docker Desktop open
 docker-compose up --build
 ```
-The first time you run this, Docker will download several base images and build your custom `postgres` image. This may take a few minutes. **Leave this terminal window running**, as it displays the live logs for all services.
 
-#### **Setup Step 4: Load Data into the Database**
+The **first time** this runs it will take 5–10 minutes — Docker is downloading and building images. After that it starts in about 30 seconds.
 
-The `postgres_db` container has started and automatically enabled the necessary extensions (see section below). Now, you must populate it with the map data.
+**Leave this terminal open** — it shows live logs from all services. Press `Ctrl+C` to stop.
 
-1.  **Open a NEW terminal window** (do not close the one from Step 3).
-2.  **Copy the data file** into the running database container:
-    ```bash
-    docker cp data/southern-zone-latest.osm.pbf postgres_database:/tmp/data.osm.pbf
-    ```
-3.  **Run the `osm2pgsql` import process** inside the container. This will take several minutes.
-    ```bash
-    docker exec -it postgres_database osm2pgsql -d wayline -U admin -W --create --slim -C 2048 --hstore --multi-geometry /tmp/data.osm.pbf
-    ```
-    When prompted for a password, enter `admin`.
+### Verify everything is running
 
-#### **Setup Step 5: Verify the Application**
+Open these URLs in your browser:
 
-Once the `osm2pgsql` command is finished, your full application is running.
-*   **Your Web Application:** [http://localhost:5000](http://localhost:5000)
-*   **Your Database UI (pgAdmin):** [http://localhost:8080](http://localhost:8080) (Login with `admin@example.com` / `admin`)
+| URL | What you should see |
+|-----|---------------------|
+| http://localhost:8080 | The Wayline web app (map + login page) |
+| http://localhost:3000 | `{"message":"not found"}` or similar JSON |
+| http://localhost:8888 | pgAdmin login page |
 
----
+If a URL doesn't load, check the terminal logs for errors.
 
-# 🚀 Project Workflow Guidelines
-
-Welcome to the project! This document explains how we collaborate using Git branches to keep our main branch stable and clean.
-
----
-
-## 🔁 Branching Strategy
-
-| Branch | Status | Purpose | Access |
-|--------|--------|---------|--------|
-| `main` | ✅ **Protected branch** | Contains only reviewed and production-ready code | Only maintainer (via PR) |
-| `updates` | ✏️ **Working branch** | Used by all team members to add new features, updates, or bug fixes | All collaborators |
-
-### Key Points:
-- **DO NOT push directly** to the `main` branch
-- All collaborative work happens on the `updates` branch
-- Only reviewed code gets merged into `main` via Pull Requests
-
----
-
-## 🛠️ How to Contribute
-
-### 1. Clone the Repository (First Time Setup)
+### Stopping the app
 
 ```bash
-git clone https://github.com/<your-username>/<your-repo>.git
-cd <your-repo>
+# Press Ctrl+C in the terminal running docker-compose, then:
+docker-compose down
 ```
 
-### 2. Switch to the `updates` Branch
+---
+
+## 6. Daily Git Workflow
+
+Follow these steps **every time** you sit down to work. Skipping steps is what causes merge conflicts and rejected pushes.
+
+### Before you start: pull the latest code
 
 ```bash
 git checkout updates
+git pull origin updates
 ```
 
-If `updates` branch is not available locally yet:
+This gets any changes your teammates pushed since you last worked. **Always do this first.**
+
+### Pick up a task
+
+Go to the project board: https://github.com/users/YUVARAJ-R-ai/projects/2
+
+Find an issue assigned to you in the **Backlog** or **Ready** column. Move it to **In Progress**.
+
+### Create a branch for your task
+
+Never work directly on the `updates` branch. Create your own branch:
 
 ```bash
-git fetch
+git checkout -b feature/issue-4-register-endpoint
+#                    └─ use the issue number and a short description
+```
+
+Examples of good branch names:
+- `feature/issue-4-register-endpoint`
+- `feature/issue-9-api-keys-page`
+- `fix/issue-3-db-tables`
+
+### Make your changes
+
+Write your code. When you reach a natural stopping point:
+
+```bash
+# Check what you've changed
+git status
+
+# Stage the specific files you changed (don't use git add .)
+git add api-gateway/app.js
+
+# Save with a commit message that mentions the issue number
+git commit -m "issue #4: add POST /auth/register endpoint"
+```
+
+**Why not `git add .`?** The project has a 10 GB data folder. `git add .` tries to process all of it and appears frozen for minutes. Always name specific files.
+
+### Push your branch to GitHub
+
+```bash
+git push origin feature/issue-4-register-endpoint
+```
+
+The first time you push a new branch, Git will tell you to run a slightly longer command — just copy and run what it suggests.
+
+### Open a Pull Request
+
+When your work is ready for review:
+
+```bash
+gh pr create --base updates --title "issue #4: add register endpoint" --body "Closes #4"
+```
+
+Or go to https://github.com/YUVARAJ-R-ai/wayline and GitHub will show a banner to open a PR.
+
+Move your issue card to **In Review** on the project board.
+
+### After your PR is merged
+
+```bash
 git checkout updates
+git pull origin updates
+git branch -d feature/issue-4-register-endpoint
 ```
 
-### 3. Stay Updated with Latest Changes
+Move your issue card to **Done** on the project board.
 
-**Before starting any work**, always pull the latest changes:
+---
 
+## 7. Using the Project Board
+
+Board link: https://github.com/users/YUVARAJ-R-ai/projects/2
+
+The board has 5 columns. Move your issue card through them as you work:
+
+```
+Backlog → Ready → In Progress → In Review → Done
+```
+
+| Column | Meaning |
+|--------|---------|
+| **Backlog** | Task exists but can't be started yet (waiting on something else) |
+| **Ready** | Task is ready to start — pick it up |
+| **In Progress** | You are actively working on it right now |
+| **In Review** | Your PR is open, waiting for review |
+| **Done** | PR merged, task complete |
+
+**Rules:**
+- Only move cards you are assigned to
+- Work on one task at a time — finish before picking up the next
+- If you're blocked, leave a comment on the issue explaining what's blocking you
+
+---
+
+## 8. Branch Rules
+
+| Branch | Purpose | Can you push directly? |
+|--------|---------|----------------------|
+| `main` | Stable, production-ready code | ❌ No — protected, requires PR + review |
+| `updates` | Active development | ❌ No — use feature branches |
+| `feature/...` | Your individual work | ✅ Yes — this is your branch |
+
+**The flow is always:**
+```
+feature branch → PR into updates → (lead reviews) → merged
+```
+
+`updates` gets merged into `main` by the project lead only, when a set of features is stable and tested.
+
+---
+
+## 9. Common Errors and Fixes
+
+### "rejected — fetch first"
+```
+! [rejected] updates -> updates (fetch first)
+```
+**Cause:** A teammate pushed while you were working and you didn't pull first.
+**Fix:**
 ```bash
 git pull origin updates
-```
-
-#### 🧠 Important Notes:
-- **You must be on the `updates` branch** for this to work smoothly
-- Check your current branch with: `git branch`
-- If you have **local uncommitted changes**, Git might show a merge conflict
-
-#### Handling Local Changes Before Pulling:
-
-**Option A: Commit your changes first**
-```bash
-git add .
-git commit -m "Your work in progress"
-git pull origin updates
-```
-
-**Option B: Stash your changes temporarily**
-```bash
-git stash
-git pull origin updates
-git stash pop  # Reapply your stashed changes
-```
-
-### 4. Make Your Changes
-
-- Add or edit files as needed
-- Use `git add` and `git commit` to stage and save your changes
-
-```bash
-git add .
-git commit -m "Your message describing the update"
-```
-
-### 5. Push to the `updates` Branch
-
-```bash
 git push origin updates
 ```
 
 ---
 
-## 🔄 Merging to `main`
-
-Only the **project maintainer** can merge `updates` into `main` via a **Pull Request (PR)** after review.
-
-This ensures:
-- Code is stable and tested
-- Everyone agrees on what goes into `main`
-- Bugs are minimized in production
-- Proper code review process is followed
+### "Need to specify how to reconcile divergent branches"
+```
+fatal: Need to specify how to reconcile divergent branches
+```
+**Cause:** You didn't run the one-time config from Step 3 of setup.
+**Fix (permanent):**
+```bash
+git config pull.rebase false
+```
+**Fix (this one time):**
+```bash
+git pull --no-rebase origin updates
+```
 
 ---
-
-## 🧰 Advanced Workflow Tips
-
-### For Frequent Branch Switchers
-
-If you switch between branches often, ensure you have the latest updates:
-
-```bash
-git fetch --all
-git pull
-```
-
-### Quick Status Check
-
-Always check your repository status before major operations:
-
-```bash
-git status
-```
-
-### Check Current Branch
-
-Verify which branch you're currently on:
-
-```bash
-git branch
-```
-
-The current branch will be highlighted with an asterisk (*).
-
----
-
-## 🔧 Troubleshooting Common Issues
-
-### "Your branch is behind 'origin/updates'"
-**Solution:** Run `git pull origin updates`
-
-### "You have unmerged paths"
-**Solution:** 
-1. Resolve merge conflicts in the affected files
-2. Stage resolved files: `git add <filename>`
-3. Complete the merge: `git commit`
 
 ### "Please commit your changes or stash them before you merge"
-**Solution:** Either commit your changes or use `git stash` as shown above
-
-### Merge Conflicts
-If Git shows a **merge conflict**:
-1. Open the conflicted files
-2. Look for conflict markers (`<<<<<<<`, `=======`, `>>>>>>>`)
-3. Resolve conflicts manually by choosing the correct code
-4. Remove conflict markers
-5. Stage resolved files: `git add <filename>`
-6. Complete the merge: `git commit`
-
----
-
-## 📋 Daily Workflow Checklist
-
-- [ ] Switch to `updates` branch: `git checkout updates`
-- [ ] Pull latest changes: `git pull origin updates`
-- [ ] Make your changes
-- [ ] Stage changes: `git add .`
-- [ ] Commit with descriptive message: `git commit -m "Description"`
-- [ ] Push to updates: `git push origin updates`
+**Cause:** You have unsaved changes and tried to pull or switch branches.
+**Fix — Option A (commit first):**
+```bash
+git add api-gateway/app.js     # add your changed files
+git commit -m "work in progress"
+git pull origin updates
+```
+**Fix — Option B (save for later):**
+```bash
+git stash                      # temporarily tucks your changes away
+git pull origin updates
+git stash pop                  # brings your changes back
+```
 
 ---
 
-## 📞 When to Reach Out
-
-Contact the team lead or create an issue if:
-- You encounter persistent merge conflicts
-- You want to add a major new feature
-- You're unsure about any step in this process
-- You need help with Git commands
-- You accidentally pushed to the wrong branch
-
----
-
-## 📚 Quick Reference Commands
-
-| Command | Purpose |
-|---------|---------|
-| `git status` | Check current state of your repository |
-| `git branch` | See all branches and current branch |
-| `git checkout updates` | Switch to updates branch |
-| `git pull origin updates` | Pull latest changes from updates branch |
-| `git add .` | Stage all changes |
-| `git commit -m "message"` | Commit staged changes |
-| `git push origin updates` | Push changes to remote updates branch |
-| `git stash` | Temporarily save uncommitted changes |
-| `git stash pop` | Restore stashed changes |
-| `git fetch --all` | Download all remote branch updates |
+### "You have unmerged paths" / merge conflict
+**Cause:** Two people changed the same part of the same file.
+**Fix:**
+1. Open the file Git is complaining about
+2. Find the conflict markers — they look like this:
+   ```
+   <<<<<<< HEAD
+   your version of the code
+   =======
+   your teammate's version
+   >>>>>>> branch-name
+   ```
+3. Delete the markers and keep the correct version of the code
+4. Save the file, then:
+   ```bash
+   git add the-file-you-fixed.js
+   git commit
+   ```
 
 ---
 
-## ✅ Summary
-
-- **`main` branch**: Final, stable codebase - Only maintainer access via PR
-- **`updates` branch**: Active development - All team members collaborate here
-- **Always pull before starting work** to avoid conflicts
-- **Create issues or ask questions** before major changes
-
-**Remember:** When in doubt, check `git status` first and don't hesitate to ask for help!
-
-Happy coding! 💻🔥
+### Docker container won't start
+1. Make sure Docker Desktop is open and shows "Engine running"
+2. Check the terminal logs for the specific error
+3. Try: `docker-compose down && docker-compose up --build`
+4. If the database is corrupted: `docker-compose down -v` (this resets the database — ask the lead first)
 
 ---
 
-*Need to customize this README? Replace `<your-username>` and `<your-repo>` with your actual GitHub repository details.*
+## 10. Quick Reference Cheat Sheet
+
+```bash
+# === SETUP (one time only) ===
+git clone git@github.com:YUVARAJ-R-ai/wayline.git
+git checkout updates
+git config pull.rebase false
+
+# === START OF EVERY WORK SESSION ===
+git checkout updates
+git pull origin updates
+
+# === STARTING A TASK ===
+git checkout -b feature/issue-{n}-short-description
+
+# === SAVING YOUR WORK ===
+git status                              # see what changed
+git add path/to/changed-file.js         # stage specific files
+git commit -m "issue #{n}: description" # save with issue reference
+
+# === SHARING YOUR WORK ===
+git push origin feature/issue-{n}-short-description
+
+# === OPENING A PULL REQUEST ===
+gh pr create --base updates --title "issue #{n}: description" --body "Closes #{n}"
+
+# === AFTER YOUR PR IS MERGED ===
+git checkout updates
+git pull origin updates
+git branch -d feature/issue-{n}-short-description
+
+# === RUN THE APP ===
+docker-compose up --build    # start everything
+docker-compose down          # stop everything
+```
+
+---
+
+## Team
+
+| Person | GitHub | Role |
+|--------|--------|------|
+| Yuvaraj | [@YUVARAJ-R-ai](https://github.com/YUVARAJ-R-ai) | Project Lead — infrastructure, reviews, merges to main |
+| Indhra | [@Indhracha-05](https://github.com/Indhracha-05) | Backend — auth system, database, API endpoints |
+| Sarathy | [@sarathy-cloud](https://github.com/sarathy-cloud) | Full-stack — API keys system, frontend features |
+
+---
+
+*For questions, open an issue on the repo or message the team lead directly.*

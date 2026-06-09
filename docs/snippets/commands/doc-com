@@ -1,0 +1,5 @@
+docker exec -it postgres_database psql -U admin -d wayline
+CREATE EXTENSION hstore;
+docker cp data/southern-zone-latest.osm.pbf postgres_database:/tmp/data.osm.pbf
+docker exec -it postgres_database osm2pgsql -d wayline -U admin -W --create --slim -C 2048 --hstore --multi-geometry /tmp/data.osm.pbf
+docker system prune -a
