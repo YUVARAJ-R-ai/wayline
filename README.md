@@ -119,11 +119,11 @@ git clone git@github.com:YUVARAJ-R-ai/wayline-nextjs.git
 
 ### Step 2 — Switch to the working branch
 
-**Important:** Never work on `main`. Switch to `updates` immediately after cloning.
+**Important:** Never work on `main`. Switch to `dev` immediately after cloning.
 
 ```bash
 cd wayline
-git checkout updates
+git checkout dev
 ```
 
 ### Step 3 — Tell Git how to handle updates (one-time config)
@@ -219,8 +219,8 @@ Follow these steps **every time** you sit down to work. Skipping steps is what c
 ### Before you start: pull the latest code
 
 ```bash
-git checkout updates
-git pull origin updates
+git checkout dev
+git pull origin dev
 ```
 
 This gets any changes your teammates pushed since you last worked. **Always do this first.**
@@ -233,7 +233,7 @@ Find an issue assigned to you in the **Backlog** or **Ready** column. Move it to
 
 ### Create a branch for your task
 
-Never work directly on the `updates` branch. Create your own branch:
+Never work directly on the `dev` branch. Create your own branch:
 
 ```bash
 git checkout -b feature/issue-4-register-endpoint
@@ -275,7 +275,7 @@ The first time you push a new branch, Git will tell you to run a slightly longer
 When your work is ready for review:
 
 ```bash
-gh pr create --base updates --title "issue #4: add register endpoint" --body "Closes #4"
+gh pr create --base dev --title "issue #4: add register endpoint" --body "Closes #4"
 ```
 
 Or go to https://github.com/YUVARAJ-R-ai/wayline and GitHub will show a banner to open a PR.
@@ -285,8 +285,8 @@ Move your issue card to **In Review** on the project board.
 ### After your PR is merged
 
 ```bash
-git checkout updates
-git pull origin updates
+git checkout dev
+git pull origin dev
 git branch -d feature/issue-4-register-endpoint
 ```
 
@@ -324,15 +324,15 @@ Backlog → Ready → In Progress → In Review → Done
 | Branch | Purpose | Can you push directly? |
 |--------|---------|----------------------|
 | `main` | Stable, production-ready code | ❌ No — protected, requires PR + review |
-| `updates` | Active development | ❌ No — use feature branches |
+| `dev` | Active development | ❌ No — use feature branches |
 | `feature/...` | Your individual work | ✅ Yes — this is your branch |
 
 **The flow is always:**
 ```
-feature branch → PR into updates → (lead reviews) → merged
+feature branch → PR into dev → (lead reviews) → merged
 ```
 
-`updates` gets merged into `main` by the project lead only, when a set of features is stable and tested.
+`dev` gets merged into `main` by the project lead only, when a set of features is stable and tested.
 
 ---
 
@@ -340,13 +340,13 @@ feature branch → PR into updates → (lead reviews) → merged
 
 ### "rejected — fetch first"
 ```
-! [rejected] updates -> updates (fetch first)
+! [rejected] dev -> dev (fetch first)
 ```
 **Cause:** A teammate pushed while you were working and you didn't pull first.
 **Fix:**
 ```bash
-git pull origin updates
-git push origin updates
+git pull origin dev
+git push origin dev
 ```
 
 ---
@@ -362,7 +362,7 @@ git config pull.rebase false
 ```
 **Fix (this one time):**
 ```bash
-git pull --no-rebase origin updates
+git pull --no-rebase origin dev
 ```
 
 ---
@@ -373,12 +373,12 @@ git pull --no-rebase origin updates
 ```bash
 git add api-gateway/app.js     # add your changed files
 git commit -m "work in progress"
-git pull origin updates
+git pull origin dev
 ```
 **Fix — Option B (save for later):**
 ```bash
 git stash                      # temporarily tucks your changes away
-git pull origin updates
+git pull origin dev
 git stash pop                  # brings your changes back
 ```
 
@@ -418,12 +418,12 @@ git stash pop                  # brings your changes back
 ```bash
 # === SETUP (one time only) ===
 git clone git@github.com:YUVARAJ-R-ai/wayline.git
-git checkout updates
+git checkout dev
 git config pull.rebase false
 
 # === START OF EVERY WORK SESSION ===
-git checkout updates
-git pull origin updates
+git checkout dev
+git pull origin dev
 
 # === STARTING A TASK ===
 git checkout -b feature/issue-{n}-short-description
@@ -437,11 +437,11 @@ git commit -m "issue #{n}: description" # save with issue reference
 git push origin feature/issue-{n}-short-description
 
 # === OPENING A PULL REQUEST ===
-gh pr create --base updates --title "issue #{n}: description" --body "Closes #{n}"
+gh pr create --base dev --title "issue #{n}: description" --body "Closes #{n}"
 
 # === AFTER YOUR PR IS MERGED ===
-git checkout updates
-git pull origin updates
+git checkout dev
+git pull origin dev
 git branch -d feature/issue-{n}-short-description
 
 # === RUN THE APP ===
