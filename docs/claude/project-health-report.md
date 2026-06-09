@@ -5,7 +5,7 @@
 
 | What | Git remote | Branch strategy |
 |------|-----------|-----------------|
-| Backend + infra | `git@github.com:YUVARAJ-R-ai/wayline.git` | `main` (protected) / `updates` (active dev) |
+| Backend + infra | `git@github.com:YUVARAJ-R-ai/wayline.git` | `main` (protected) / `dev` (active dev) |
 | Frontend (Next.js) | `git@github.com:YUVARAJ-R-ai/wayline-nextjs.git` | `main` |
 
 `frontend/` is its own independent git repo living inside the `wayline` folder.
@@ -20,7 +20,7 @@ The outer `wayline` repo sees it as an ignored directory — they are versioned 
 - docker-compose: only postgres + pgAdmin + OSRM (no api-gateway, no frontend service)
 - Status: **Do not develop here.** Kept for historical reference only.
 
-### `updates` — New microservice architecture (active branch)
+### `dev` — New microservice architecture (active branch)
 - docker-compose: all 5 services (api-gateway, frontend, postgres, pgAdmin, OSRM)
 - Monolith files deleted
 - **This is the branch all teammates should work on**

@@ -3,6 +3,12 @@
 ## 👉 Start Here: [Team Workflow Guide](team-workflow.md)
 *Daily git workflow, branch strategy, project board usage, and how to avoid common errors.*
 
+## Owner Guides
+| File | Description |
+|------|-------------|
+| [owner-pr-guide.md](owner-pr-guide.md) | How to raise a PR from `dev` → `main` and merge it safely |
+| [gitlens-guide.md](gitlens-guide.md) | How to read the GitLens commit graph and track the team's work |
+
 ---
 
 ## Folder Structure
