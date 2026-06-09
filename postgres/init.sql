@@ -2,3 +2,6 @@
 -- It ensures all required extensions are enabled.
 CREATE EXTENSION IF NOT EXISTS postgis;
 CREATE EXTENSION IF NOT EXISTS hstore;
+
+# Switch back to the default 'postgres' user for security.
+USER postgres

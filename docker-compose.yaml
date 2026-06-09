@@ -1,18 +1,54 @@
-# This file now references variables from your .env file
+# /wayline/docker-compose.yml
 
 services:
-  # Our custom-built PostgreSQL Database Service
-  postgres_db:
-    build: ./postgres
-    container_name: postgres_database
+  # 1. The Backend API Gateway Service (no changes)
+  api-gateway:
+    container_name: wayline_api_gateway
+    build:
+      context: ./api-gateway
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./api-gateway:/app
+      - /app/node_modules
+    depends_on:
+      postgres_db:
+        condition: service_healthy
     environment:
-      # These values are now read from your .env file
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres_db:5432/${POSTGRES_DB}
+      - OSRM_URL=http://routing_engine:5000
+      - PORT=3000
+      - OPENCAGE_API_KEY=${OPENCAGE_API_KEY}
+  # 2. The Next.js Frontend Service (no changes)
+  frontend:
+    container_name: wayline_frontend
+    build:
+      context: ./frontend
+    ports:
+      - "8080:3000"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:3000
+    depends_on:
+      - api-gateway
+
+  # 3. The PostgreSQL Database Service (MODIFIED)
+  postgres_db:
+    build:
+      context: ./postgres
+    container_name: postgres_database
+    # user: "1000" <-- REMOVE THIS LINE. It is no longer needed.
+    environment:
       - POSTGRES_DB=${POSTGRES_DB}
       - POSTGRES_USER=${POSTGRES_USER}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
     ports:
       - "5432:5432"
     volumes:
+      # --- THIS IS THE CHANGE ---
+      # We now use a Docker-managed named volume, which handles permissions correctly.
       - postgres_data:/var/lib/postgresql/data
       - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
     healthcheck:
@@ -21,47 +57,29 @@ services:
       timeout: 5s
       retries: 5
 
-  # The pgAdmin web interface for managing the database
+  # 4. The pgAdmin Web Interface (no changes)
   postgres_ui:
     image: dpage/pgadmin4
     container_name: postgres_ui
     environment:
-      # These values are now read from your .env file
       - PGADMIN_DEFAULT_EMAIL=${PGADMIN_DEFAULT_EMAIL}
       - PGADMIN_DEFAULT_PASSWORD=${PGADMIN_DEFAULT_PASSWORD}
     ports:
-      - "8080:80"
+      - "8888:80"
     depends_on:
       - postgres_db
 
-  # Our custom backend API Server
-  api:
-    build: .
-    container_name: wayline_api
-    ports:
-      - "5000:5000"
-    volumes:
-      - .:/app
-    depends_on:
-      postgres_db:
-        condition: service_healthy
-    # We now pass environment variables into our Node.js application
-    environment:
-      - POSTGRES_DB=${POSTGRES_DB}
-      - POSTGRES_USER=${POSTGRES_USER}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-      - POSTGRES_HOST=postgres_db # The host is still the service name
-      - OPENCAGE_API_KEY=${OPENCAGE_API_KEY}
-
-  # The high-performance routing engine
+  # 5. The OSRM Routing Engine (no changes)
   routing_engine:
     image: osrm/osrm-backend:latest
     container_name: osrm_router
     ports:
       - "5001:5000"
     volumes:
-      - ./data:/data
+      - ./data/osrm-data:/data
     command: osrm-routed --algorithm mld /data/southern-zone-latest.osrm
 
+# --- ADD THIS SECTION AT THE END OF THE FILE ---
+# This defines the named volume we referenced above.
 volumes:
   postgres_data:
