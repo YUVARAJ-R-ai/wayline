@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Wayline Maps</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="index.css" />
+</head>
+<body>
+    <!-- Search bar HTML (no changes) -->
+    <div class="search-container">
+        <input type="text" id="search-input" placeholder="Search for a location...">
+        <button id="search-button">Search</button>
+        <button id="clear-button">Clear</button>
+    </div>
+
+    <div id="map"></div>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        // --- Map Initialization (no changes) ---
+        const map = L.map('map').setView([13.08, 80.27], 12);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19,
+            attribution: '© <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+        }).addTo(map);
+
+        // --- State variables (no changes) ---
+        let startPoint = null;
+        let endPoint = null;
+        let startMarker = null;
+        let endMarker = null;
+        let routeLayer = null;
+
+        // --- NEW: Centralized Cleanup Function ---
+        // This function resets the entire routing state.
+        function clearRoute() {
+            if (startMarker) map.removeLayer(startMarker);
+            if (endMarker) map.removeLayer(endMarker);
+            if (routeLayer) map.removeLayer(routeLayer);
+            startPoint = null;
+            endPoint = null;
+            startMarker = null;
+            endMarker = null;
+            routeLayer = null;
+        }
+
+        // --- Routing Function (no changes) ---
+        async function getRoute() {
+            const from = `${startPoint.lng},${startPoint.lat}`;
+            const to = `${endPoint.lng},${endPoint.lat}`;
+            const apiUrl = `/api/route?from=${from}&to=${to}`;
+            try {
+                const response = await fetch(apiUrl);
+                if (!response.ok) throw new Error('Network response was not ok');
+                const routeGeoJSON = await response.json();
+                routeLayer = L.geoJSON(routeGeoJSON, { style: { color: '#007bff', weight: 5 } }).addTo(map);
+                map.fitBounds(routeLayer.getBounds());
+            } catch (error) {
+                console.error('Error fetching route:', error);
+                alert("Could not calculate the route.");
+            }
+        }
+
+        // --- MODIFIED: Search now integrates with routing ---
+        async function searchLocation() {
+            const query = document.getElementById('search-input').value;
+            if (!query) return;
+
+            const response = await fetch(`/api/geocode?q=${encodeURIComponent(query)}`);
+            if (response.ok) {
+                const data = await response.json();
+                
+                // 1. Clear any previous route
+                clearRoute();
+
+                // 2. Set the searched location as the start point
+                startPoint = { lat: data.lat, lng: data.lng };
+                startMarker = L.marker(startPoint).addTo(map)
+                    .bindPopup(`<b>Start Point</b><br>${data.address}`).openPopup();
+
+                // 3. Zoom to the new start point
+                map.flyTo(startPoint, 15);
+                
+                // The next click on the map will now set the end point.
+
+            } else {
+                alert('Location not found.');
+            }
+        }
+        
+        // Add event listeners for the search bar (no changes)
+        document.getElementById('search-button').addEventListener('click', searchLocation);
+        document.getElementById('search-input').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') searchLocation();
+        });
+        document.getElementById('clear-button').addEventListener('click', clearRoute);
+
+
+        // --- MODIFIED: Map Click Handler is now simpler and more robust ---
+        map.on('click', async function(e) {
+            // If a full route is already displayed, clear it.
+            // The code will then continue below to set the new start point in the same click.
+            if (startPoint && endPoint) {
+                clearRoute();
+            }
+
+            // Fetch address for the clicked point
+            const lat = e.latlng.lat;
+            const lng = e.latlng.lng;
+            let address = `Lat: ${lat.toFixed(5)}, Lng: ${lng.toFixed(5)}`; // Fallback text
+            try {
+                const response = await fetch(`/api/reverse-geocode?lat=${lat}&lng=${lng}`);
+                if (response.ok) {
+                    const data = await response.json();
+                    address = data.address;
+                }
+            } catch (error) {
+                console.error("Reverse geocoding failed", error);
+            }
+
+            if (!startPoint) {
+                // First click (or first after a clear): Set start point
+                startPoint = e.latlng;
+                startMarker = L.marker(startPoint).addTo(map)
+                    .bindPopup(`<b>Start Point</b><br>${address}`).openPopup();
+            } else {
+                // Second click: Set end point and get route
+                endPoint = e.latlng;
+                endMarker = L.marker(endPoint).addTo(map)
+                    .bindPopup(`<b>End Point</b><br>${address}`).openPopup();
+                getRoute();
+            }
+        });
+    </script>
+</body>
+</html>
