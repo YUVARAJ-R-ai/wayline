@@ -8,6 +8,7 @@
 |------|-------------|
 | [owner-pr-guide.md](owner-pr-guide.md) | How to raise a PR from `dev` → `main` and merge it safely |
 | [gitlens-guide.md](gitlens-guide.md) | How to read the GitLens commit graph and track the team's work |
+| [setup-gh-and-claude.md](setup-gh-and-claude.md) | Install `gh` CLI + Claude Code with full auth — for all teammates |
 
 ---
 
