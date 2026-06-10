@@ -3,9 +3,13 @@
 ## Repository Overview
 Wayline is a self-hosted geospatial maps API platform built with microservices.
 
-**Two repos, both required:**
-- `wayline` (this repo) — api-gateway (Node.js), docker-compose, postgres/PostGIS, OSRM routing
-- `wayline-nextjs` (separate) — Next.js frontend (login, dashboard, map)
+**Single repo:** everything lives here.
+- `api-gateway/` — Node.js Express API (routing, geocoding, road data)
+- `frontend/` — Next.js web app (login, dashboard, map)
+- `postgres/` — PostGIS database init
+- `docker-compose.yaml` — orchestrates all 5 services
+
+> The old `wayline-nextjs` repo is deprecated — frontend is now tracked here under `frontend/`.
 
 **Active branch:** `dev` — never push directly to `main`.
 

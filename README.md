@@ -23,14 +23,17 @@ Wayline is a self-hosted maps and routing platform — think of it as our own pr
 
 ## 1. How the Project is Structured
 
-The project is split into **two separate GitHub repositories**. You need to clone both.
+Everything lives in **one repository** — [`wayline`](https://github.com/YUVARAJ-R-ai/wayline). You only need to clone once.
 
-| Repository | What's inside | Who works here |
-|------------|--------------|----------------|
-| [`wayline`](https://github.com/YUVARAJ-R-ai/wayline) | Backend API, database setup, Docker config | Backend team |
-| [`wayline-nextjs`](https://github.com/YUVARAJ-R-ai/wayline-nextjs) | Frontend (Next.js web app) | Frontend team |
+| Folder | What's inside |
+|--------|--------------|
+| `api-gateway/` | Express backend — handles all API requests |
+| `frontend/` | Next.js web app — the UI users see |
+| `postgres/` | Database init scripts (PostGIS + hstore) |
+| `data/` | OSRM routing data (~7 GB, **not in git** — set up manually) |
+| `docs/` | All project documentation |
 
-Both repos need to be running at the same time for the full app to work.
+> **Note:** There is an older repo called `wayline-nextjs` on GitHub. It is no longer used — the frontend has been merged here. Ignore it.
 
 ---
 
@@ -104,18 +107,16 @@ This lets you push and pull code without typing your password every time.
 
 Do these steps **once** when you first join the project. After that, just use the daily workflow.
 
-### Step 1 — Clone the repositories
+### Step 1 — Clone the repository
 
 Open a terminal and run:
 
 ```bash
-# Clone the backend repo
 git clone git@github.com:YUVARAJ-R-ai/wayline.git
 cd wayline
-
-# Clone the frontend repo (in a separate folder)
-git clone git@github.com:YUVARAJ-R-ai/wayline-nextjs.git
 ```
+
+That's it. The frontend is inside `frontend/` — no second clone needed.
 
 ### Step 2 — Switch to the working branch
 

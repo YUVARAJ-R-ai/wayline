@@ -200,17 +200,16 @@ git config --global --list
 
 ---
 
-## Part 4 — Clone the Wayline Repos
+## Part 4 — Clone the Wayline Repo
 
 ```bash
-# Backend
 git clone git@github.com:YUVARAJ-R-ai/wayline.git
 cd wayline
 git checkout dev          # ← always work on dev, never main
-
-# Frontend (in a separate folder)
-git clone git@github.com:YUVARAJ-R-ai/wayline-nextjs.git
 ```
+
+The frontend (`frontend/`) is inside the same repo — no second clone needed.
+The old `wayline-nextjs` repo on GitHub is no longer active.
 
 ---
 

@@ -3,27 +3,27 @@
 
 ---
 
-## 1. Repository Setup (Who Clones What)
+## 1. Repository Setup
 
-The project lives in **two separate repositories**. Clone both.
+The entire project lives in **one repository**. One clone, one branch, everything together.
 
 ```bash
-# Backend (api-gateway, docker-compose, postgres)
 git clone git@github.com:YUVARAJ-R-ai/wayline.git
 cd wayline
 git checkout dev        # <-- always work on this branch
-
-# Frontend (Next.js app)
-git clone git@github.com:YUVARAJ-R-ai/wayline-nextjs.git
 ```
 
-| Repo | Branch to work on | What's inside |
-|------|-------------------|---------------|
-| `wayline` | `dev` | api-gateway, docker-compose, postgres, docs |
-| `wayline-nextjs` | `main` | Next.js frontend (login, dashboard, map) |
+| Folder | What's inside |
+|--------|---------------|
+| `api-gateway/` | Express backend API |
+| `frontend/` | Next.js web app (login, dashboard, map) |
+| `postgres/` | Database init scripts |
+| `docs/` | All documentation |
 
-> **Never push directly to `main` in `wayline`.**
+> **Never push directly to `main`.**
 > It is the production-ready branch — only the project lead merges into it via a Pull Request.
+
+> **Note:** The old `wayline-nextjs` repo on GitHub is no longer used. All frontend work happens in `frontend/` inside this repo.
 
 ---
 
