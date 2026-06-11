@@ -14,9 +14,6 @@ node_modules/
 # ===== Knowledge-graph output =====
 /graphify-out/
 
-# ===== Frontend is a SEPARATE git repo (wayline-nextjs), tracked independently =====
-# Ignoring it here prevents a broken embedded-repo/gitlink in this repo.
-/frontend/
 
 # ===== Build / cache artifacts =====
 .next/

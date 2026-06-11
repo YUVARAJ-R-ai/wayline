@@ -1,151 +1,278 @@
 # Wayline — Geospatial API Platform
 
-Wayline is a self-hosted maps and routing platform — think of it as our own private version of Google Maps. It lets users search for locations, calculate driving routes, and access map data through an API.
+Wayline is a self-hosted maps and routing platform. It provides a web UI for location search, turn-by-turn routing, and road data access, backed by an Express API, PostGIS database, and an OSRM routing engine — all running locally in Docker.
 
-> **New to the team?** Read this whole file top to bottom before you do anything else. It will save you hours of confusion.
+> **New to the team?** Read this file top to bottom before touching anything. It will save you hours.
 
 ---
 
 ## Table of Contents
 
-1. [How the Project is Structured](#1-how-the-project-is-structured)
-2. [How the App Works](#2-how-the-app-works)
-3. [Prerequisites — Install These First](#3-prerequisites--install-these-first)
-4. [First-Time Setup](#4-first-time-setup)
-5. [Running the App](#5-running-the-app)
-6. [Daily Git Workflow](#6-daily-git-workflow)
-7. [Using the Project Board](#7-using-the-project-board)
-8. [Branch Rules](#8-branch-rules)
-9. [Common Errors and Fixes](#9-common-errors-and-fixes)
-10. [Quick Reference Cheat Sheet](#10-quick-reference-cheat-sheet)
+1. [Architecture](#1-architecture)
+2. [Repository Structure](#2-repository-structure)
+3. [API Endpoints](#3-api-endpoints)
+4. [Frontend Pages](#4-frontend-pages)
+5. [Prerequisites](#5-prerequisites)
+6. [First-Time Setup](#6-first-time-setup)
+7. [Running the App](#7-running-the-app)
+8. [Environment Variables](#8-environment-variables)
+9. [Daily Git Workflow](#9-daily-git-workflow)
+10. [Branch Rules](#10-branch-rules)
+11. [Common Errors and Fixes](#11-common-errors-and-fixes)
+12. [Quick Reference Cheat Sheet](#12-quick-reference-cheat-sheet)
+13. [Team](#13-team)
 
 ---
 
-## 1. How the Project is Structured
+## 1. Architecture
 
-The project is split into **two separate GitHub repositories**. You need to clone both.
-
-| Repository | What's inside | Who works here |
-|------------|--------------|----------------|
-| [`wayline`](https://github.com/YUVARAJ-R-ai/wayline) | Backend API, database setup, Docker config | Backend team |
-| [`wayline-nextjs`](https://github.com/YUVARAJ-R-ai/wayline-nextjs) | Frontend (Next.js web app) | Frontend team |
-
-Both repos need to be running at the same time for the full app to work.
-
----
-
-## 2. How the App Works
-
-The app is made up of **5 services** that all run together using Docker. You don't run them separately — Docker handles everything.
+The app is composed of **5 Docker services** that communicate over Docker's internal network:
 
 ```
-Browser / Frontend (port 8080)
-        │
-        ▼
-  API Gateway (port 3000)    ← your Express backend — the brain
-     /        \
-    ▼           ▼
-PostgreSQL    OSRM Router     ← database and routing engine
-(port 5432)   (port 5001)
+  User's browser
+       │
+       ▼
+┌─────────────────────────┐
+│  frontend               │  Next.js 14 — login, home map, dashboard
+│  localhost:8080         │  NextAuth JWT sessions
+└────────────┬────────────┘
+             │ HTTP  (NEXT_PUBLIC_API_URL=http://localhost:3000)
+             ▼
+┌─────────────────────────┐         ┌──────────────────────────┐
+│  api-gateway            │────────▶│  routing_engine (OSRM)   │
+│  localhost:3000         │         │  localhost:5001           │
+│  Node.js / Express      │         │  MLD algorithm            │
+└────────────┬────────────┘         │  southern-zone map data   │
+             │                      └──────────────────────────┘
+             │ DATABASE_URL
+             ▼
+┌─────────────────────────┐         ┌──────────────────────────┐
+│  postgres_db            │◀────────│  postgres_ui (pgAdmin)   │
+│  localhost:5432         │         │  localhost:8888           │
+│  PostgreSQL + PostGIS   │         └──────────────────────────┘
+│  + hstore extension     │
+└─────────────────────────┘
 
-pgAdmin (port 8888)           ← visual tool to inspect the database
+External dependency: OpenCage Geocoding API (geocode + reverse-geocode endpoints)
 ```
 
-| Service | What it does | URL when running |
-|---------|-------------|-----------------|
-| `wayline_frontend` | The web app users see | http://localhost:8080 |
-| `wayline_api_gateway` | Handles all API requests | http://localhost:3000 |
-| `postgres_database` | Stores user data and map data | (internal) |
-| `osrm_router` | Calculates driving routes | http://localhost:5001 |
-| `postgres_ui` | Visual database browser (pgAdmin) | http://localhost:8888 |
+### Service Summary
+
+| Container | Image | Host Port | Internal Port | Role |
+|-----------|-------|-----------|---------------|------|
+| `wayline_frontend` | Custom (Next.js) | **8080** | 3000 | Web UI |
+| `wayline_api_gateway` | Custom (Node.js) | **3000** | 3000 | REST API |
+| `postgres_database` | Custom (PostGIS) | **5432** | 5432 | Spatial database |
+| `postgres_ui` | `dpage/pgadmin4` | **8888** | 80 | DB admin UI |
+| `osrm_router` | `osrm/osrm-backend` | **5001** | 5000 | Route calculation |
+
+### Service Dependencies
+
+```
+frontend      → depends on: api-gateway (HTTP)
+api-gateway   → depends on: postgres_db (healthcheck), routing_engine (HTTP)
+postgres_ui   → depends on: postgres_db
+routing_engine → standalone (needs ./data/osrm-data volume mounted)
+```
 
 ---
 
-## 3. Prerequisites — Install These First
+## 2. Repository Structure
 
-Install all of these before cloning the repo. If you already have them, skip ahead.
+Everything lives in **one repository**. One clone gives you the full stack.
 
-### Git
-Version control — how we track and share code changes.
-- Download: https://git-scm.com/downloads
-- Verify: `git --version` (should print a version number)
+```
+wayline/
+├── api-gateway/
+│   ├── app.js              ← Express entry point — all 4 API endpoints
+│   ├── Dockerfile
+│   └── package.json
+│
+├── frontend/
+│   ├── app/
+│   │   ├── page.tsx             ← Home page (full-screen map + search bar)
+│   │   ├── login/page.tsx       ← Login form (NextAuth credentials)
+│   │   ├── dashboard/
+│   │   │   ├── layout.tsx       ← Dashboard shell with sidebar nav
+│   │   │   ├── page.tsx         ← Dashboard overview (placeholder)
+│   │   │   └── keys/page.tsx    ← API keys page (placeholder)
+│   │   └── api/auth/[...nextauth]/route.ts  ← NextAuth handler
+│   ├── components/
+│   │   ├── Map.tsx              ← Leaflet map (OSM tiles, SSR-disabled)
+│   │   ├── HomePageClient.tsx   ← Client wrapper for home page
+│   │   ├── SignOutButton.tsx    ← Sign-out button component
+│   │   └── providers.tsx        ← NextAuth SessionProvider wrapper
+│   ├── lib/auth.ts              ← NextAuth config (mock credentials provider)
+│   ├── Dockerfile
+│   └── package.json
+│
+├── postgres/
+│   ├── Dockerfile               ← PostGIS image build
+│   └── init.sql                 ← Enables postgis + hstore extensions on first run
+│
+├── data/                        ← OSRM map files (~7 GB, NOT in git)
+│   └── osrm-data/
+│       └── southern-zone-latest.osrm
+│
+├── geo_rev/                     ← Legacy Flask geocoding service (dead code, not wired)
+│
+├── docs/                        ← All project documentation
+├── .claude/                     ← Claude Code skills for the team
+├── CLAUDE.md                    ← Claude Code project instructions
+├── docker-compose.yaml
+└── .env                         ← Secrets (never commit this)
+```
 
-### Docker Desktop
-Runs all the services in isolated containers. **You need this running before starting the app.**
-- Download: https://www.docker.com/products/docker-desktop
-- After installing, open Docker Desktop and wait for it to show "Engine running"
-- Verify: `docker --version`
-
-### Node.js (v18 or higher)
-Required for the API gateway and frontend.
-- Download: https://nodejs.org (choose the LTS version)
-- Verify: `node --version` and `npm --version`
-
-### Setting up SSH for GitHub
-This lets you push and pull code without typing your password every time.
-
-1. Generate an SSH key (skip if you already have one):
-   ```bash
-   ssh-keygen -t ed25519 -C "your@email.com"
-   # Press Enter 3 times to accept defaults
-   ```
-2. Copy your public key:
-   ```bash
-   cat ~/.ssh/id_ed25519.pub
-   # Copy the entire output
-   ```
-3. Add it to GitHub: https://github.com/settings/ssh/new
-4. Test it: `ssh -T git@github.com`
-   - You should see: `Hi your-username! You've successfully authenticated`
+> **`data/`** is excluded from git — it holds the OSRM map files. Get them from the project lead.
+> **`geo_rev/`** is legacy code that was never integrated. It will be removed in issue [#16](https://github.com/YUVARAJ-R-ai/wayline/issues/16).
 
 ---
 
-## 4. First-Time Setup
+## 3. API Endpoints
 
-Do these steps **once** when you first join the project. After that, just use the daily workflow.
+All endpoints are served by the **api-gateway** at `http://localhost:3000`.
 
-### Step 1 — Clone the repositories
+### `GET /api/route`
 
-Open a terminal and run:
+Calculates a driving route between two coordinates using OSRM.
+
+| Query param | Format | Example |
+|-------------|--------|---------|
+| `from` | `lon,lat` | `80.2707,13.0827` |
+| `to` | `lon,lat` | `80.2500,13.0600` |
+
+**Response:** GeoJSON geometry object (`type: "LineString"`, `coordinates: [[lon,lat],...]`)
+
+**Note:** OSRM returns coordinates in `[lon, lat]` order. Leaflet's `<Polyline>` expects `[lat, lon]` — always reverse before rendering.
 
 ```bash
-# Clone the backend repo
+curl "localhost:3000/api/route?from=80.2707,13.0827&to=80.2500,13.0600"
+```
+
+---
+
+### `GET /api/geocode`
+
+Converts a text search query to coordinates via the OpenCage API.
+
+| Query param | Type | Example |
+|-------------|------|---------|
+| `q` | string | `Chennai Central` |
+
+**Response:** `{ lat, lng, address }`
+
+```bash
+curl "localhost:3000/api/geocode?q=Chennai+Central"
+```
+
+---
+
+### `GET /api/reverse-geocode`
+
+Converts coordinates to a human-readable address via OpenCage.
+
+| Query param | Type | Example |
+|-------------|------|---------|
+| `lat` | number | `13.0827` |
+| `lng` | number | `80.2707` |
+
+**Response:** `{ address }`
+
+```bash
+curl "localhost:3000/api/reverse-geocode?lat=13.0827&lng=80.2707"
+```
+
+---
+
+### `GET /api/roads`
+
+Returns up to 1000 road features from PostGIS as a GeoJSON FeatureCollection.
+
+**Response:** `{ type: "FeatureCollection", features: [{ type: "Feature", properties: { id, type }, geometry }] }`
+
+Queries `planet_osm_line` where `highway IS NOT NULL`. Requires OSM road data to be imported into PostgreSQL.
+
+```bash
+curl "localhost:3000/api/roads"
+```
+
+---
+
+## 4. Frontend Pages
+
+| Route | Auth required | Status | What it does |
+|-------|--------------|--------|--------------|
+| `/` | No | Working | Full-screen Leaflet map with search bar and Sign In button |
+| `/login` | No | Working | NextAuth credentials login. Dev credentials: `admin@wayline.com` / `password` |
+| `/dashboard` | Yes | Placeholder | Dashboard overview shell — content to be built |
+| `/dashboard/keys` | Yes | Placeholder | API keys management — not yet implemented |
+
+**Auth flow:**
+- Unauthenticated users visiting `/` are shown the map with a Sign In button
+- Unauthenticated users visiting `/dashboard` are redirected to `/login`
+- Sessions are JWT-based (NextAuth, no database session storage)
+- Currently uses a hardcoded mock user — real user table not yet wired
+
+**Map component (`components/Map.tsx`):**
+- Leaflet + react-leaflet, dynamically imported (SSR disabled)
+- OpenStreetMap tiles
+- Default center: Chennai area
+
+---
+
+## 5. Prerequisites
+
+Install all of these before cloning. Skip any you already have.
+
+| Tool | Version | Install |
+|------|---------|---------|
+| Git | any | https://git-scm.com/downloads |
+| Docker Desktop | latest | https://www.docker.com/products/docker-desktop |
+| Node.js | 18+ | https://nodejs.org (LTS) |
+| `gh` CLI | 2.x | See [docs/setup-gh-and-claude.md](docs/setup-gh-and-claude.md) |
+
+Verify:
+```bash
+git --version
+docker --version
+node --version    # must be 18+
+gh --version
+```
+
+---
+
+## 6. First-Time Setup
+
+Do these steps **once** when you first join the project.
+
+### Step 1 — Clone
+
+```bash
 git clone git@github.com:YUVARAJ-R-ai/wayline.git
 cd wayline
-
-# Clone the frontend repo (in a separate folder)
-git clone git@github.com:YUVARAJ-R-ai/wayline-nextjs.git
+git checkout dev          # never work on main
 ```
 
-### Step 2 — Switch to the working branch
-
-**Important:** Never work on `main`. Switch to `dev` immediately after cloning.
-
-```bash
-cd wayline
-git checkout dev
-```
-
-### Step 3 — Tell Git how to handle updates (one-time config)
-
-This prevents a common error you will hit otherwise:
+### Step 2 — One-time git config
 
 ```bash
 git config pull.rebase false
 ```
 
-### Step 4 — Create the environment file
+Prevents `fatal: Need to specify how to reconcile divergent branches`.
 
-The app needs a `.env` file with credentials. Ask the project lead (Yuvaraj) for the values, then create the file:
+### Step 3 — Create the `.env` file
+
+Ask the project lead (Yuvaraj) for the values, then:
 
 ```bash
-# Inside the wayline folder
 cp .env.example .env
-# Then open .env and fill in the values Yuvaraj gives you
+# Fill in the values
 ```
 
-The file needs these values:
-```
+Required variables:
+
+```env
 POSTGRES_DB=
 POSTGRES_USER=
 POSTGRES_PASSWORD=
@@ -154,311 +281,242 @@ PGADMIN_DEFAULT_PASSWORD=
 OPENCAGE_API_KEY=
 ```
 
-### Step 5 — Get the map data
+> Get a free OpenCage key at https://opencagedata.com — 2500 req/day free tier.
 
-The routing engine needs a large data file (~7 GB) that is **not stored in Git** (it's too big).
+### Step 4 — Get the OSRM map data
 
-Ask Yuvaraj to share the `osrm-data.tar.gz` file from the team drive. Once you have it:
+The routing engine needs ~7 GB of pre-processed map files not stored in git.
+
+Ask Yuvaraj for `osrm-data.tar.gz`, then:
 
 ```bash
-# Place the file in the wayline folder, then extract it
-cd wayline
-tar -xzvf data/osrm-data.tar.gz -C data/
+mkdir -p data
+tar -xzvf osrm-data.tar.gz -C data/
+# Results in: data/osrm-data/southern-zone-latest.osrm  (+ sibling files)
 ```
 
-This creates the `data/osrm-data/` folder the routing engine needs.
-
-### Step 6 — Install backend dependencies
+### Step 5 — Install backend dependencies (for local dev without Docker)
 
 ```bash
-cd wayline/api-gateway
-npm install
-cd ..
+cd api-gateway && npm install && cd ..
+cd frontend && npm install && cd ..
 ```
 
 ---
 
-## 5. Running the App
-
-Once setup is complete, starting the app is one command:
+## 7. Running the App
 
 ```bash
-# Inside the wayline folder, with Docker Desktop open
+# Start all 5 services (run from repo root, Docker must be open)
 docker-compose up --build
 ```
 
-The **first time** this runs it will take 5–10 minutes — Docker is downloading and building images. After that it starts in about 30 seconds.
+First run downloads images and builds containers — takes 5–10 minutes. Subsequent starts take ~30 seconds.
 
-**Leave this terminal open** — it shows live logs from all services. Press `Ctrl+C` to stop.
+**Verify everything started:**
 
-### Verify everything is running
-
-Open these URLs in your browser:
-
-| URL | What you should see |
-|-----|---------------------|
-| http://localhost:8080 | The Wayline web app (map + login page) |
-| http://localhost:3000 | `{"message":"not found"}` or similar JSON |
+| URL | Expected |
+|-----|----------|
+| http://localhost:8080 | Wayline home page — full-screen map |
+| http://localhost:3000/api/geocode?q=Chennai | JSON response with lat/lng |
 | http://localhost:8888 | pgAdmin login page |
 
-If a URL doesn't load, check the terminal logs for errors.
-
-### Stopping the app
-
+**Stop:**
 ```bash
-# Press Ctrl+C in the terminal running docker-compose, then:
 docker-compose down
 ```
 
+**Stop and wipe the database:**
+```bash
+docker-compose down -v    # ⚠️ destroys postgres_data volume — ask lead first
+```
+
+### Known limitations (current sprint)
+
+| Issue | Status |
+|-------|--------|
+| Search bar on home page — no results yet | Issue [#18](https://github.com/YUVARAJ-R-ai/wayline/issues/18) |
+| Dashboard is a placeholder card | Issue [#18](https://github.com/YUVARAJ-R-ai/wayline/issues/18) |
+| Auth uses a hardcoded mock user | Issue [#17](https://github.com/YUVARAJ-R-ai/wayline/issues/17) |
+| `geo_rev/` folder is dead code | Issue [#16](https://github.com/YUVARAJ-R-ai/wayline/issues/16) |
+| OSRM URL is hardcoded in `app.js` (ignores env var) | Issue [#16](https://github.com/YUVARAJ-R-ai/wayline/issues/16) |
+
 ---
 
-## 6. Daily Git Workflow
+## 8. Environment Variables
 
-Follow these steps **every time** you sit down to work. Skipping steps is what causes merge conflicts and rejected pushes.
+### Root `.env` (consumed by docker-compose)
 
-### Before you start: pull the latest code
+| Variable | Used by | What it is |
+|----------|---------|-----------|
+| `POSTGRES_DB` | postgres_db, api-gateway | Database name |
+| `POSTGRES_USER` | postgres_db, api-gateway | DB username |
+| `POSTGRES_PASSWORD` | postgres_db, api-gateway | DB password |
+| `PGADMIN_DEFAULT_EMAIL` | postgres_ui | pgAdmin login email |
+| `PGADMIN_DEFAULT_PASSWORD` | postgres_ui | pgAdmin login password |
+| `OPENCAGE_API_KEY` | api-gateway | Key for geocoding/reverse-geocode calls |
+
+### `frontend/.env.local` (consumed by Next.js)
+
+| Variable | Value | What it is |
+|----------|-------|-----------|
+| `NEXT_PUBLIC_API_URL` | `http://localhost:3000` | Base URL for API calls from the browser |
+| `NEXTAUTH_URL` | `http://localhost:8080` | Must match the frontend port, not the API port |
+| `NEXTAUTH_SECRET` | any random string | Signs NextAuth JWTs |
+
+> **Important:** `NEXTAUTH_URL` must be `http://localhost:8080` (frontend port). Setting it to `3000` (the API port) breaks sign-out redirects.
+
+---
+
+## 9. Daily Git Workflow
+
+Follow these steps every time you sit down to work.
 
 ```bash
+# 1. Pull latest before writing a single line
 git checkout dev
 git pull origin dev
-```
 
-This gets any changes your teammates pushed since you last worked. **Always do this first.**
+# 2. Create a branch for your task
+git checkout -b feature/issue-N-short-description
 
-### Pick up a task
-
-Go to the project board: https://github.com/users/YUVARAJ-R-ai/projects/2
-
-Find an issue assigned to you in the **Backlog** or **Ready** column. Move it to **In Progress**.
-
-### Create a branch for your task
-
-Never work directly on the `dev` branch. Create your own branch:
-
-```bash
-git checkout -b feature/issue-4-register-endpoint
-#                    └─ use the issue number and a short description
-```
-
-Examples of good branch names:
-- `feature/issue-4-register-endpoint`
-- `feature/issue-9-api-keys-page`
-- `fix/issue-3-db-tables`
-
-### Make your changes
-
-Write your code. When you reach a natural stopping point:
-
-```bash
-# Check what you've changed
-git status
-
-# Stage the specific files you changed (don't use git add .)
+# 3. Work, then commit in small chunks (never git add .)
 git add api-gateway/app.js
+git commit -m "issue #N: short description"
 
-# Save with a commit message that mentions the issue number
-git commit -m "issue #4: add POST /auth/register endpoint"
-```
+# 4. Push your branch
+git push origin feature/issue-N-short-description
 
-**Why not `git add .`?** The project has a 10 GB data folder. `git add .` tries to process all of it and appears frozen for minutes. Always name specific files.
-
-### Push your branch to GitHub
-
-```bash
-git push origin feature/issue-4-register-endpoint
-```
-
-The first time you push a new branch, Git will tell you to run a slightly longer command — just copy and run what it suggests.
-
-### Open a Pull Request
-
-When your work is ready for review:
-
-```bash
-gh pr create --base dev --title "issue #4: add register endpoint" --body "Closes #4"
-```
-
-Or go to https://github.com/YUVARAJ-R-ai/wayline and GitHub will show a banner to open a PR.
-
-Move your issue card to **In Review** on the project board.
-
-### After your PR is merged
-
-```bash
+# 5. When done — run the app, verify, then merge into dev
 git checkout dev
 git pull origin dev
-git branch -d feature/issue-4-register-endpoint
+git merge --no-ff feature/issue-N-short-description -m "issue #N: merge"
+git push origin dev
+
+# 6. Raise PR from dev → main (project lead reviews)
+gh pr create --base main --head dev --title "issue #N: ..." --body "Closes #N"
+
+# 7. Clean up after merge
+git branch -d feature/issue-N-short-description
 ```
 
-Move your issue card to **Done** on the project board.
+> **Never use `git add .`** — the `data/` folder is ~7 GB. Always add specific files.
+
+> **Never push directly to `main`** — it is branch-protected. Only the lead merges via PR.
+
+Using Claude Code? Run `/start-task` to handle all of this automatically.
 
 ---
 
-## 7. Using the Project Board
+## 10. Branch Rules
 
-Board link: https://github.com/users/YUVARAJ-R-ai/projects/2
+| Branch | Purpose | Push directly? |
+|--------|---------|---------------|
+| `main` | Stable, production-ready | ❌ Protected — PR + review only |
+| `dev` | Active development | ❌ Merge feature branches in |
+| `feature/issue-N-*` | Your work | ✅ This is your branch |
+| `fix/issue-N-*` | Bug fixes | ✅ This is your branch |
 
-The board has 5 columns. Move your issue card through them as you work:
-
+Flow:
 ```
-Backlog → Ready → In Progress → In Review → Done
+feature/issue-N → merge into dev → PR from dev → main (lead only)
 ```
-
-| Column | Meaning |
-|--------|---------|
-| **Backlog** | Task exists but can't be started yet (waiting on something else) |
-| **Ready** | Task is ready to start — pick it up |
-| **In Progress** | You are actively working on it right now |
-| **In Review** | Your PR is open, waiting for review |
-| **Done** | PR merged, task complete |
-
-**Rules:**
-- Only move cards you are assigned to
-- Work on one task at a time — finish before picking up the next
-- If you're blocked, leave a comment on the issue explaining what's blocking you
 
 ---
 
-## 8. Branch Rules
+## 11. Common Errors and Fixes
 
-| Branch | Purpose | Can you push directly? |
-|--------|---------|----------------------|
-| `main` | Stable, production-ready code | ❌ No — protected, requires PR + review |
-| `dev` | Active development | ❌ No — use feature branches |
-| `feature/...` | Your individual work | ✅ Yes — this is your branch |
-
-**The flow is always:**
-```
-feature branch → PR into dev → (lead reviews) → merged
-```
-
-`dev` gets merged into `main` by the project lead only, when a set of features is stable and tested.
-
----
-
-## 9. Common Errors and Fixes
-
-### "rejected — fetch first"
-```
-! [rejected] dev -> dev (fetch first)
-```
-**Cause:** A teammate pushed while you were working and you didn't pull first.
-**Fix:**
+### `rejected — fetch first` on git push
 ```bash
 git pull origin dev
 git push origin dev
 ```
 
----
-
-### "Need to specify how to reconcile divergent branches"
-```
-fatal: Need to specify how to reconcile divergent branches
-```
-**Cause:** You didn't run the one-time config from Step 3 of setup.
-**Fix (permanent):**
+### `fatal: Need to specify how to reconcile divergent branches`
 ```bash
-git config pull.rebase false
-```
-**Fix (this one time):**
-```bash
-git pull --no-rebase origin dev
+git config pull.rebase false    # permanent fix
+git pull --no-rebase origin dev # one-time fix
 ```
 
----
-
-### "Please commit your changes or stash them before you merge"
-**Cause:** You have unsaved changes and tried to pull or switch branches.
-**Fix — Option A (commit first):**
+### `Please commit your changes or stash them before you merge`
 ```bash
-git add api-gateway/app.js     # add your changed files
-git commit -m "work in progress"
+git stash
 git pull origin dev
-```
-**Fix — Option B (save for later):**
-```bash
-git stash                      # temporarily tucks your changes away
-git pull origin dev
-git stash pop                  # brings your changes back
+git stash pop
 ```
 
----
-
-### "You have unmerged paths" / merge conflict
-**Cause:** Two people changed the same part of the same file.
-**Fix:**
-1. Open the file Git is complaining about
-2. Find the conflict markers — they look like this:
-   ```
-   <<<<<<< HEAD
-   your version of the code
-   =======
-   your teammate's version
-   >>>>>>> branch-name
-   ```
-3. Delete the markers and keep the correct version of the code
-4. Save the file, then:
-   ```bash
-   git add the-file-you-fixed.js
-   git commit
-   ```
-
----
+### Merge conflict
+1. Open the conflicting file, find `<<<<<<< HEAD` markers
+2. Keep the correct version, delete the markers
+3. `git add the-file.js && git commit`
 
 ### Docker container won't start
 1. Make sure Docker Desktop is open and shows "Engine running"
-2. Check the terminal logs for the specific error
+2. Check terminal logs for the specific error
 3. Try: `docker-compose down && docker-compose up --build`
-4. If the database is corrupted: `docker-compose down -v` (this resets the database — ask the lead first)
+
+### `routing_engine` exits immediately
+The OSRM data files are missing or in the wrong path. Check:
+```bash
+ls data/osrm-data/southern-zone-latest.osrm
+```
+If missing, get the data from Yuvaraj and re-extract.
+
+### pgAdmin shows "connection refused" for the server
+The server entry in pgAdmin needs to use the Docker hostname `postgres_database`, not `localhost`.
+- Host: `postgres_database`
+- Port: `5432`
+- Username / Password: from your `.env`
+
+### `OPENCAGE_API_KEY` missing warning in api-gateway logs
+Add your key to `.env`. Get a free key at https://opencagedata.com.
 
 ---
 
-## 10. Quick Reference Cheat Sheet
+## 12. Quick Reference Cheat Sheet
 
 ```bash
-# === SETUP (one time only) ===
-git clone git@github.com:YUVARAJ-R-ai/wayline.git
+# === SETUP (once) ===
+git clone git@github.com:YUVARAJ-R-ai/wayline.git && cd wayline
 git checkout dev
 git config pull.rebase false
+cp .env.example .env   # fill in values
 
-# === START OF EVERY WORK SESSION ===
-git checkout dev
-git pull origin dev
+# === EVERY WORK SESSION ===
+git checkout dev && git pull origin dev
 
-# === STARTING A TASK ===
-git checkout -b feature/issue-{n}-short-description
+# === START A TASK ===
+git checkout -b feature/issue-N-description
 
-# === SAVING YOUR WORK ===
-git status                              # see what changed
-git add path/to/changed-file.js         # stage specific files
-git commit -m "issue #{n}: description" # save with issue reference
-
-# === SHARING YOUR WORK ===
-git push origin feature/issue-{n}-short-description
-
-# === OPENING A PULL REQUEST ===
-gh pr create --base dev --title "issue #{n}: description" --body "Closes #{n}"
-
-# === AFTER YOUR PR IS MERGED ===
-git checkout dev
-git pull origin dev
-git branch -d feature/issue-{n}-short-description
+# === SAVE PROGRESS ===
+git add path/to/file.js
+git commit -m "issue #N: what you did"
 
 # === RUN THE APP ===
-docker-compose up --build    # start everything
-docker-compose down          # stop everything
+docker-compose up --build      # start everything
+docker-compose down            # stop
+docker-compose down -v         # stop + wipe DB
+
+# === DONE — MERGE AND RAISE PR ===
+git checkout dev && git pull origin dev
+git merge --no-ff feature/issue-N-description -m "issue #N: merge"
+git push origin dev
+gh pr create --base main --head dev --title "issue #N: ..." --body "Closes #N"
+git branch -d feature/issue-N-description
+
+# === PROJECT BOARD ===
+# https://github.com/users/YUVARAJ-R-ai/projects/2
 ```
 
 ---
 
-## Team
+## 13. Team
 
 | Person | GitHub | Role |
 |--------|--------|------|
-| Yuvaraj | [@YUVARAJ-R-ai](https://github.com/YUVARAJ-R-ai) | Project Lead — infrastructure, reviews, merges to main |
-| Indhra | [@Indhracha-05](https://github.com/Indhracha-05) | Backend — auth system, database, API endpoints |
-| Sarathy | [@sarathy-cloud](https://github.com/sarathy-cloud) | Full-stack — API keys system, frontend features |
+| Yuvaraj | [@YUVARAJ-R-ai](https://github.com/YUVARAJ-R-ai) | Project lead — all areas, merges to main |
+| Indhra | [@Indhracha-05](https://github.com/Indhracha-05) | Backend + Frontend |
 
 ---
 
-*For questions, open an issue on the repo or message the team lead directly.*
+*Questions? Open an issue on the repo or message the lead directly.*
