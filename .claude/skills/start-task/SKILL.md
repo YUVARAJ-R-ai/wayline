@@ -356,7 +356,18 @@ Then help the user implement the feature based on the user story:
 5. Keep commits small and named with the issue number so they auto-link to the GitHub issue
 
 **Commit message format:** `issue #N: short description of what changed`
-Never use `git add .` — always add specific files to avoid committing `.env`, node_modules, or data files.
+
+> ⚠️ **NEVER use `git add .`** — the `data/` folder is ~7 GB of OSRM binary files.
+> Always stage specific files only:
+> ```bash
+> git add api-gateway/app.js          # ✅ correct
+> git add postgres/init.sql           # ✅ correct
+> git add .                           # ❌ NEVER — will try to stage gigabytes
+> ```
+
+> ⚠️ **NEVER push directly to `main`** — it is branch-protected.
+> Only the project lead merges into `main` via a reviewed PR.
+> Developer flow: commit → push feature branch → merge to `dev` → PR `dev → main`.
 
 Continue implementing until all acceptance criteria are met. Then move to Phase 8.
 
@@ -540,6 +551,10 @@ Skip Phases 1–9. Only do Phases 10–11. Run from the current state of `BASE_B
 ---
 
 ## Error handling
+
+**"Accidentally ran `git add .`"**: Run `git reset HEAD` immediately to unstage everything, then add only the specific files you changed. Never commit the `data/` folder — it is ~7 GB of binary OSRM files.
+
+**"Tried to push to main"**: `main` is branch-protected. You cannot push there directly. Merge your work into `dev` first, then raise a PR from `dev → main` for the lead to review and merge.
 
 **"Issue not found"**: The issue number doesn't exist or is closed. Ask the user to double-check.
 
