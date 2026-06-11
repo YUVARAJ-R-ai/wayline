@@ -3,7 +3,8 @@
 const express = require('express');
 const { Pool } = require('pg');
 const axios = require('axios');
-const cors = require('cors'); // <-- Import cors
+const cors = require('cors');
+const bcrypt = require('bcryptjs');
 
 const app = express();
 // Use the PORT from environment variables, or default to 3000
@@ -100,6 +101,39 @@ app.get('/api/roads', async (req, res) => {
     } catch (err) {
         console.error('Database query error:', err.stack);
         res.status(500).json({ error: 'An error occurred while fetching road data.' });
+    }
+});
+
+// --- Auth Endpoints ---
+
+// POST /auth/register
+// Body: { email: string, password: string }
+// Returns: 201 on success | 400 if fields missing | 409 if email taken
+app.post('/auth/register', async (req, res) => {
+    const { email, password } = req.body;
+
+    // Validate required fields
+    if (!email || !password) {
+        return res.status(400).json({ error: 'Email and password are required.' });
+    }
+
+    try {
+        // Hash password — 10 salt rounds is the standard for web APIs
+        const passwordHash = await bcrypt.hash(password, 10);
+
+        await pool.query(
+            'INSERT INTO users (email, password_hash) VALUES ($1, $2)',
+            [email, passwordHash]
+        );
+
+        return res.status(201).json({ message: 'User registered successfully.' });
+    } catch (err) {
+        // Postgres unique_violation error code — email already exists
+        if (err.code === '23505') {
+            return res.status(409).json({ error: 'Email already registered.' });
+        }
+        console.error('Register error:', err.message);
+        return res.status(500).json({ error: 'Registration failed. Please try again.' });
     }
 });
 
