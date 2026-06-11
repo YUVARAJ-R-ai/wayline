@@ -60,15 +60,27 @@ Set up the GitHub Project board, gather requirements, generate user stories, cre
 
 When the user types `/plan-project`, invoke the Skill tool with `skill: "plan-project"` before doing anything else.
 
+## /new-issue
+**Who uses it:** Anyone on the team when they spot a bug, want to request a feature, or need to log a task.
+
+Describe the issue in plain English — the skill detects the type (bug/feature/chore/docs), generates a structured body with acceptance criteria, confirms with you, creates the GitHub issue, and adds it to the project board as Backlog.
+
+```
+/new-issue                          # fully interactive
+/new-issue "fix login redirect bug" # seed description, skip the opening prompt
+```
+
+When the user types `/new-issue`, invoke the Skill tool with `skill: "new-issue"` before doing anything else.
+
 ## /start-task
 **Who uses it:** Every teammate, every time they start work on a new issue.
 
-Fetch your assigned issue from Backlog, get a detailed user story, create your feature branch, implement the feature, raise a PR to `dev`, move the issue to In Review.
+Fetch your assigned issue from Backlog, get a detailed user story, create your feature branch, implement the feature, verify it runs, merge into dev, raise a PR from dev to main, move the issue to In Review.
 
 ```
 /start-task            # list your assigned issues, pick one, run full flow
 /start-task 7          # jump straight to issue #7
-/start-task --pr-only  # just raise the PR for the branch you're already on
+/start-task --pr-only  # raise the dev→main PR for the current state of dev
 ```
 
 When the user types `/start-task`, invoke the Skill tool with `skill: "start-task"` before doing anything else.

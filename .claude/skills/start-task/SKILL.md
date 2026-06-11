@@ -344,15 +344,30 @@ Then help the user implement the feature based on the user story:
 
 1. Read the relevant files identified in Phase 3 ("What to Build")
 2. Implement the changes one file at a time
-3. After each logical chunk, commit:
+3. After each logical chunk, commit (never use `git add .`):
    ```bash
    git add path/to/changed/file.js
    git commit -m "issue #$ISSUE_NUMBER: [what this commit does]"
    ```
-4. Keep commits small and named with the issue number so they auto-link to the GitHub issue
+4. Push the feature branch to origin after each commit session so your work is backed up remotely:
+   ```bash
+   git push origin $BRANCH_NAME
+   ```
+5. Keep commits small and named with the issue number so they auto-link to the GitHub issue
 
 **Commit message format:** `issue #N: short description of what changed`
-Never use `git add .` — always add specific files to avoid committing `.env`, node_modules, or data files.
+
+> ⚠️ **NEVER use `git add .`** — the `data/` folder is ~7 GB of OSRM binary files.
+> Always stage specific files only:
+> ```bash
+> git add api-gateway/app.js          # ✅ correct
+> git add postgres/init.sql           # ✅ correct
+> git add .                           # ❌ NEVER — will try to stage gigabytes
+> ```
+
+> ⚠️ **NEVER push directly to `main`** — it is branch-protected.
+> Only the project lead merges into `main` via a reviewed PR.
+> Developer flow: commit → push feature branch → merge to `dev` → PR `dev → main`.
 
 Continue implementing until all acceptance criteria are met. Then move to Phase 8.
 
@@ -402,8 +417,11 @@ Do not proceed to Phase 9 until the user explicitly confirms the app is working 
 Once the user confirms the app is working, merge the feature branch directly into `BASE_BRANCH` (no pull request for this step).
 
 ```bash
+# Step 5: Switch back to dev and pull latest
 git checkout $BASE_BRANCH
 git pull origin $BASE_BRANCH
+
+# Merge the feature branch (preserves branch history with a merge commit)
 git merge --no-ff $BRANCH_NAME -m "issue #$ISSUE_NUMBER: merge $BRANCH_NAME into $BASE_BRANCH"
 ```
 
@@ -422,9 +440,12 @@ git push origin $BASE_BRANCH
 
 Print: `✓ $BRANCH_NAME merged into $BASE_BRANCH and pushed.`
 
-Optionally clean up the feature branch:
+**Step 7 — Clean up the feature branch:**
 ```bash
+# Delete locally
 git branch -d $BRANCH_NAME
+
+# Delete from remote
 git push origin --delete $BRANCH_NAME
 ```
 
@@ -530,6 +551,10 @@ Skip Phases 1–9. Only do Phases 10–11. Run from the current state of `BASE_B
 ---
 
 ## Error handling
+
+**"Accidentally ran `git add .`"**: Run `git reset HEAD` immediately to unstage everything, then add only the specific files you changed. Never commit the `data/` folder — it is ~7 GB of binary OSRM files.
+
+**"Tried to push to main"**: `main` is branch-protected. You cannot push there directly. Merge your work into `dev` first, then raise a PR from `dev → main` for the lead to review and merge.
 
 **"Issue not found"**: The issue number doesn't exist or is closed. Ask the user to double-check.
 
