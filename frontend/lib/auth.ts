@@ -1,18 +1,6 @@
 import { NextAuthOptions, User } from "next-auth"
 import CredentialsProvider from "next-auth/providers/credentials"
 
-// NOTE: In a real app, you'd fetch users from a database.
-// The password here is a hash for "password", but our authorize function below just checks for the plain text "password" for simplicity.
-const mockUsers = [
-  {
-    id: "1",
-    email: "admin@wayline.com",
-    // Hashed "password": bcrypt.hashSync("password", 10)
-    password: "$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi", 
-    name: "Admin User"
-  }
-];
-
 export const authOptions: NextAuthOptions = {
   providers: [
     CredentialsProvider({
@@ -26,22 +14,39 @@ export const authOptions: NextAuthOptions = {
           return null;
         }
 
-        const user = mockUsers.find(u => u.email === credentials.email);
-        
-        // For this demo, we'll check the plain text password for simplicity.
-        // In a real app, you would use: await bcrypt.compare(credentials.password, user.password)
-        const isPasswordValid = user && credentials.password === "password";
+        try {
+          const backendUrl = process.env.BACKEND_URL || "http://api-gateway:3000";
+          const res = await fetch(`${backendUrl}/auth/login`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              email: credentials.email,
+              password: credentials.password,
+            }),
+          });
 
-        if (user && isPasswordValid) {
-          // Return the user object to be encoded in the JWT
-          return {
-            id: user.id,
-            email: user.email,
-            name: user.name,
-          };
+          if (!res.ok) {
+            return null;
+          }
+
+          const data = await res.json();
+
+          if (data && data.token && data.user) {
+            // Return user object combined with token
+            // NextAuth will save the returned fields to the JWT/session.
+            return {
+              id: data.user.id.toString(),
+              email: data.user.email,
+              name: data.user.email.split("@")[0], // Fallback name
+              token: data.token, // Store the token in the user object
+            };
+          }
+        } catch (error) {
+          console.error("NextAuth authorize error:", error);
         }
-        
-        // Return null if user not found or password invalid
+
         return null;
       }
     })
@@ -57,6 +62,7 @@ export const authOptions: NextAuthOptions = {
     async jwt({ token, user }) {
       if (user) {
         token.id = user.id;
+        token.accessToken = (user as any).token;
       }
       return token;
     },
@@ -64,6 +70,7 @@ export const authOptions: NextAuthOptions = {
     async session({ session, token }) {
       if (session.user) {
         session.user.id = token.id as string;
+        (session.user as any).accessToken = token.accessToken as string;
       }
       return session;
     }

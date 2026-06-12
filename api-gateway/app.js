@@ -6,6 +6,7 @@ const axios = require('axios');
 const cors = require('cors');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
 
 const app = express();
 // Use the PORT from environment variables, or default to 3000
@@ -14,6 +15,60 @@ const PORT = process.env.PORT || 3000;
 // --- Middleware ---
 app.use(cors()); // <-- Enable CORS for all requests
 app.use(express.json()); // <-- Middleware to parse JSON bodies
+
+// Middleware to authenticate JWT tokens
+const authenticateToken = (req, res, next) => {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
+
+    if (!token) {
+        return res.status(401).json({ error: 'Access token required.' });
+    }
+
+    jwt.verify(token, process.env.JWT_SECRET || 'wayline_jwt_secret_key', (err, decoded) => {
+        if (err) {
+            return res.status(403).json({ error: 'Invalid or expired token.' });
+        }
+        req.user = decoded; // Contains { userId, email }
+        next();
+    });
+};
+
+// Middleware to validate X-API-Key header against database hashes
+const protectWithApiKey = async (req, res, next) => {
+    const apiKey = req.headers['x-api-key'];
+
+    if (!apiKey) {
+        return res.status(401).json({ error: 'API key required.' });
+    }
+
+    try {
+        // SHA-256 hash the incoming raw API key
+        const keyHash = crypto.createHash('sha256').update(apiKey).digest('hex');
+
+        // Look up the hash in the database
+        const keyRes = await pool.query(
+            'SELECT id FROM api_keys WHERE key_hash = $1',
+            [keyHash]
+        );
+        const apiKeyRecord = keyRes.rows[0];
+
+        if (!apiKeyRecord) {
+            return res.status(401).json({ error: 'Invalid API key.' });
+        }
+
+        // Increment the usage count
+        await pool.query(
+            'UPDATE api_keys SET usage_count = usage_count + 1 WHERE id = $1',
+            [apiKeyRecord.id]
+        );
+
+        next();
+    } catch (err) {
+        console.error('API key validation error:', err.message);
+        return res.status(500).json({ error: 'Internal server error during authentication.' });
+    }
+};
 
 // --- Database Connection ---
 // This uses the DATABASE_URL from docker-compose.yml for a cleaner setup.
@@ -25,7 +80,7 @@ const pool = new Pool({
 // --- API Endpoints ---
 
 // This endpoint now uses the service name `routing_engine` from docker-compose.yml
-app.get('/api/route', async (req, res) => {
+app.get('/api/route', protectWithApiKey, async (req, res) => {
     const { from, to } = req.query;
     if (!from || !to) { return res.status(400).send('Missing "from" or "to" query parameters.'); }
     const fromCoords = from.split(',');
@@ -45,7 +100,7 @@ app.get('/api/route', async (req, res) => {
 
 // The geocoding endpoints remain largely the same.
 // For now, we'll keep the OpenCage API. This can be swapped for Pelias later.
-app.get('/api/geocode', async (req, res) => {
+app.get('/api/geocode', protectWithApiKey, async (req, res) => {
     const { q } = req.query;
     const apiKey = process.env.OPENCAGE_API_KEY; // This needs to be in your .env file
     if (!q) { return res.status(400).send('Missing search query "q".'); }
@@ -65,7 +120,7 @@ app.get('/api/geocode', async (req, res) => {
     }
 });
 
-app.get('/api/reverse-geocode', async (req, res) => {
+app.get('/api/reverse-geocode', protectWithApiKey, async (req, res) => {
     const { lat, lng } = req.query;
     const apiKey = process.env.OPENCAGE_API_KEY;
     if (!lat || !lng) { return res.status(400).send('Missing "lat" or "lng" parameters.'); }
@@ -180,6 +235,70 @@ app.post('/auth/login', async (req, res) => {
     } catch (err) {
         console.error('Login error:', err.message);
         return res.status(500).json({ error: 'Login failed. Please try again.' });
+    }
+});
+
+// --- API Key Endpoints ---
+
+// POST /api/keys
+// Generate a new API key, store its hash, return raw key once.
+// Returns: 201 Created
+app.post('/api/keys', authenticateToken, async (req, res) => {
+    try {
+        const rawKey = 'wlk_' + crypto.randomUUID().replace(/-/g, '');
+        const prefix = rawKey.substring(0, 8); // e.g. "wlk_1a2b"
+        const keyHash = crypto.createHash('sha256').update(rawKey).digest('hex');
+
+        await pool.query(
+            'INSERT INTO api_keys (user_id, key_hash, prefix) VALUES ($1, $2, $3)',
+            [req.user.userId, keyHash, prefix]
+        );
+
+        return res.status(201).json({
+            key: rawKey,
+            prefix: prefix
+        });
+    } catch (err) {
+        console.error('Create API key error:', err.message);
+        return res.status(500).json({ error: 'Failed to create API key.' });
+    }
+});
+
+// GET /api/keys
+// List all API keys (prefixes/usage) belonging to the authenticated user.
+// Returns: 200 OK
+app.get('/api/keys', authenticateToken, async (req, res) => {
+    try {
+        const result = await pool.query(
+            'SELECT id, prefix, created_at, usage_count FROM api_keys WHERE user_id = $1 ORDER BY created_at DESC',
+            [req.user.userId]
+        );
+        return res.status(200).json(result.rows);
+    } catch (err) {
+        console.error('Get API keys error:', err.message);
+        return res.status(500).json({ error: 'Failed to retrieve API keys.' });
+    }
+});
+
+// DELETE /api/keys/:prefix
+// Delete a specific API key belonging to the authenticated user.
+// Returns: 200 OK | 404 Not Found
+app.delete('/api/keys/:prefix', authenticateToken, async (req, res) => {
+    const { prefix } = req.params;
+    try {
+        const result = await pool.query(
+            'DELETE FROM api_keys WHERE prefix = $1 AND user_id = $2 RETURNING id',
+            [prefix, req.user.userId]
+        );
+
+        if (result.rowCount === 0) {
+            return res.status(404).json({ error: 'API key not found or not authorized.' });
+        }
+
+        return res.status(200).json({ message: 'API key deleted successfully.' });
+    } catch (err) {
+        console.error('Delete API key error:', err.message);
+        return res.status(500).json({ error: 'Failed to delete API key.' });
     }
 });
 
