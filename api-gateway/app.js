@@ -34,6 +34,42 @@ const authenticateToken = (req, res, next) => {
     });
 };
 
+// Middleware to validate X-API-Key header against database hashes
+const protectWithApiKey = async (req, res, next) => {
+    const apiKey = req.headers['x-api-key'];
+
+    if (!apiKey) {
+        return res.status(401).json({ error: 'API key required.' });
+    }
+
+    try {
+        // SHA-256 hash the incoming raw API key
+        const keyHash = crypto.createHash('sha256').update(apiKey).digest('hex');
+
+        // Look up the hash in the database
+        const keyRes = await pool.query(
+            'SELECT id FROM api_keys WHERE key_hash = $1',
+            [keyHash]
+        );
+        const apiKeyRecord = keyRes.rows[0];
+
+        if (!apiKeyRecord) {
+            return res.status(401).json({ error: 'Invalid API key.' });
+        }
+
+        // Increment the usage count
+        await pool.query(
+            'UPDATE api_keys SET usage_count = usage_count + 1 WHERE id = $1',
+            [apiKeyRecord.id]
+        );
+
+        next();
+    } catch (err) {
+        console.error('API key validation error:', err.message);
+        return res.status(500).json({ error: 'Internal server error during authentication.' });
+    }
+};
+
 // --- Database Connection ---
 // This uses the DATABASE_URL from docker-compose.yml for a cleaner setup.
 const pool = new Pool({
@@ -44,7 +80,7 @@ const pool = new Pool({
 // --- API Endpoints ---
 
 // This endpoint now uses the service name `routing_engine` from docker-compose.yml
-app.get('/api/route', async (req, res) => {
+app.get('/api/route', protectWithApiKey, async (req, res) => {
     const { from, to } = req.query;
     if (!from || !to) { return res.status(400).send('Missing "from" or "to" query parameters.'); }
     const fromCoords = from.split(',');
@@ -64,7 +100,7 @@ app.get('/api/route', async (req, res) => {
 
 // The geocoding endpoints remain largely the same.
 // For now, we'll keep the OpenCage API. This can be swapped for Pelias later.
-app.get('/api/geocode', async (req, res) => {
+app.get('/api/geocode', protectWithApiKey, async (req, res) => {
     const { q } = req.query;
     const apiKey = process.env.OPENCAGE_API_KEY; // This needs to be in your .env file
     if (!q) { return res.status(400).send('Missing search query "q".'); }
@@ -84,7 +120,7 @@ app.get('/api/geocode', async (req, res) => {
     }
 });
 
-app.get('/api/reverse-geocode', async (req, res) => {
+app.get('/api/reverse-geocode', protectWithApiKey, async (req, res) => {
     const { lat, lng } = req.query;
     const apiKey = process.env.OPENCAGE_API_KEY;
     if (!lat || !lng) { return res.status(400).send('Missing "lat" or "lng" parameters.'); }
