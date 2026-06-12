@@ -1,0 +1,57 @@
+name: CI
+
+# Validates that both services build and the frontend lints/compiles.
+# Runs on GitHub-hosted runners for pull requests and pushes to dev/main.
+on:
+  pull_request:
+    branches: [dev, main]
+  push:
+    branches: [dev]
+
+jobs:
+  frontend:
+    name: Frontend (lint + build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run build
+        env:
+          NEXT_TELEMETRY_DISABLED: "1"
+
+  api-gateway:
+    name: API gateway (install + syntax check)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: api-gateway
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+          cache: npm
+          cache-dependency-path: api-gateway/package-lock.json
+      - run: npm ci
+      # No test suite yet — at least verify the entrypoint parses.
+      - run: node --check app.js
+
+  compose:
+    name: Validate production compose
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate docker-compose.prod.yaml
+        run: |
+          # Provide dummy env so variable interpolation resolves.
+          cp .env.example .env
+          docker compose -f docker-compose.prod.yaml config >/dev/null

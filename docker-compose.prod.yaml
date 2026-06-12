@@ -1,0 +1,110 @@
+# /wayline/docker-compose.prod.yaml
+#
+# Self-contained PRODUCTION stack. Use on its own (not layered over the dev file):
+#   docker compose -f docker-compose.prod.yaml up -d --build
+#
+# Differences from the dev docker-compose.yaml:
+#   - No source bind-mounts: the built image is the source of truth.
+#   - Frontend runs a production Next.js build (Dockerfile.prod), not `next dev`.
+#   - restart: unless-stopped on every long-lived service.
+#   - Only Nginx talks to frontend/api-gateway; those are not host-published.
+#   - Postgres and pgAdmin are bound to 127.0.0.1 (reach via SSH tunnel / Tailscale).
+#   - OSRM map-data path is configurable via OSRM_DATA_DIR.
+
+services:
+  api-gateway:
+    container_name: wayline_api_gateway
+    build:
+      context: ./api-gateway
+    restart: unless-stopped
+    expose:
+      - "3000"
+    depends_on:
+      postgres_db:
+        condition: service_healthy
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres_db:5432/${POSTGRES_DB}
+      - OSRM_URL=http://routing_engine:5000
+      - PORT=3000
+      - OPENCAGE_API_KEY=${OPENCAGE_API_KEY}
+      - JWT_SECRET=${JWT_SECRET}
+
+  frontend:
+    container_name: wayline_frontend
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.prod
+    restart: unless-stopped
+    expose:
+      - "3000"
+    environment:
+      # Same-origin: the browser hits /api/* and /auth/* on the Nginx host.
+      - NEXT_PUBLIC_API_URL=
+      - NODE_ENV=production
+      # NextAuth requires a secret in production and a URL for callbacks.
+      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
+      - NEXTAUTH_URL=${NEXTAUTH_URL:-http://localhost}
+      # Server-side calls from NextAuth to the api-gateway (Docker DNS).
+      - BACKEND_URL=http://api-gateway:3000
+    depends_on:
+      - api-gateway
+
+  postgres_db:
+    container_name: postgres_database
+    build:
+      context: ./postgres
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  postgres_ui:
+    image: dpage/pgadmin4
+    container_name: postgres_ui
+    restart: unless-stopped
+    environment:
+      - PGADMIN_DEFAULT_EMAIL=${PGADMIN_DEFAULT_EMAIL}
+      - PGADMIN_DEFAULT_PASSWORD=${PGADMIN_DEFAULT_PASSWORD}
+    ports:
+      - "127.0.0.1:8888:80"
+    depends_on:
+      - postgres_db
+
+  routing_engine:
+    image: osrm/osrm-backend:latest
+    container_name: osrm_router
+    restart: unless-stopped
+    expose:
+      - "5000"
+    volumes:
+      - ${OSRM_DATA_DIR:-./data/osrm-data}:/data
+    command: osrm-routed --algorithm mld /data/southern-zone-latest.osrm
+
+  # Nginx reverse proxy: the only service that publishes to the host.
+  # Serves the frontend on :80 and routes /api/* + /auth/* to the api-gateway,
+  # while keeping /api/auth/* (NextAuth) on the frontend.
+  reverse_proxy:
+    image: nginx:1.27-alpine
+    container_name: wayline_proxy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./deploy/nginx/wayline.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - frontend
+      - api-gateway
+
+volumes:
+  postgres_data:
