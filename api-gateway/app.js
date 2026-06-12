@@ -5,6 +5,7 @@ const { Pool } = require('pg');
 const axios = require('axios');
 const cors = require('cors');
 const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
 
 const app = express();
 // Use the PORT from environment variables, or default to 3000
@@ -134,6 +135,51 @@ app.post('/auth/register', async (req, res) => {
         }
         console.error('Register error:', err.message);
         return res.status(500).json({ error: 'Registration failed. Please try again.' });
+    }
+});
+
+// POST /auth/login
+// Body: { email: string, password: string }
+// Returns: 200 on success | 400 if fields missing | 401 if invalid credentials
+app.post('/auth/login', async (req, res) => {
+    const { email, password } = req.body;
+
+    // Validate required fields
+    if (!email || !password) {
+        return res.status(400).json({ error: 'Email and password are required.' });
+    }
+
+    try {
+        // Find the user by email
+        const userRes = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
+        const user = userRes.rows[0];
+
+        if (!user) {
+            return res.status(401).json({ error: 'Invalid email or password.' });
+        }
+
+        // Compare password hash
+        const isPasswordValid = await bcrypt.compare(password, user.password_hash);
+        if (!isPasswordValid) {
+            return res.status(401).json({ error: 'Invalid email or password.' });
+        }
+
+        // Generate signed JWT
+        const token = jwt.sign(
+            { userId: user.id, email: user.email },
+            process.env.JWT_SECRET || 'wayline_jwt_secret_key'
+        );
+
+        return res.status(200).json({
+            token,
+            user: {
+                id: user.id,
+                email: user.email
+            }
+        });
+    } catch (err) {
+        console.error('Login error:', err.message);
+        return res.status(500).json({ error: 'Login failed. Please try again.' });
     }
 });
 
