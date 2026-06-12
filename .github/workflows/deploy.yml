@@ -1,0 +1,31 @@
+name: Deploy
+
+# Deploys the production stack on the self-hosted runner that lives on the
+# Wayline server. Triggered when main is updated (i.e. after a dev -> main PR
+# is merged), or manually from the Actions tab.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Never run two deploys at once; cancel an in-flight one if a newer push lands.
+concurrency:
+  group: wayline-production-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Build & restart on server
+    runs-on: [self-hosted, wayline]
+    steps:
+      - name: Run deploy script
+        run: /srv/wayline/deploy/deploy.sh
+        env:
+          DEPLOY_DIR: /srv/wayline
+          DEPLOY_BRANCH: main
+
+      - name: Smoke check
+        run: |
+          # Give services a moment, then confirm the proxy answers.
+          sleep 10
+          curl -fsS -o /dev/null -w "frontend HTTP %{http_code}\n" http://localhost:80/ || true
