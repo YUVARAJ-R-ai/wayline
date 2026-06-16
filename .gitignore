@@ -6,6 +6,8 @@ node_modules/
 .env
 .env.*
 !.env.example
+.cloudflared/
+wayline-backend.json
 
 # ===== Large geodata — NEVER commit (multi-GB OSRM/PBF files & archives) =====
 # This is what made `git add .` hang: ~10 GB of binaries under data/.
