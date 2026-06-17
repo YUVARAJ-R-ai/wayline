@@ -66,7 +66,7 @@ export default function HomePageClient() {
             className="absolute inset-y-0 left-0 flex items-center pl-4 hover:scale-105 transition-transform"
             disabled={loading}
           >
-            <Search className={`h-5 w-5 ${loading ? 'text-blue-500 animate-pulse' : 'text-gray-500 hover:text-blue-500'}`} />
+            <Search className={`h-5 w-5 ${loading ? 'text-accent-purple animate-pulse' : 'text-text-muted hover:text-accent-purple'}`} />
           </button>
           <input
             type="text"
@@ -79,11 +79,11 @@ export default function HomePageClient() {
               }
             }}
             disabled={loading}
-            className="w-full rounded-full bg-white/90 py-3 pl-12 pr-4 text-gray-800 shadow-lg outline-none ring-1 ring-gray-300/50 backdrop-blur-sm focus:ring-2 focus:ring-blue-500 transition-all"
+            className="w-full rounded-full bg-bg-surface/95 py-3 pl-12 pr-4 text-text-primary shadow-lg outline-none ring-1 ring-border-default/50 backdrop-blur-sm focus:ring-2 focus:ring-accent-purple transition-all"
           />
         </div>
         {error && (
-          <div className="rounded-2xl bg-red-500/90 px-4 py-2 text-sm text-white shadow-lg backdrop-blur-sm animate-in fade-in slide-in-from-top-1 duration-200">
+          <div className="rounded-2xl bg-status-error/90 px-4 py-2 text-sm text-white shadow-lg backdrop-blur-sm animate-in fade-in slide-in-from-top-1 duration-200">
             {error}
           </div>
         )}
@@ -93,11 +93,12 @@ export default function HomePageClient() {
       <div className="absolute top-5 right-5 z-10">
         <Link 
           href="/login" 
-          className="rounded-full bg-white/90 px-6 py-3 font-semibold text-gray-800 shadow-lg ring-1 ring-gray-300/50 backdrop-blur-sm transition-colors hover:bg-white"
+          className="rounded-full bg-bg-surface/95 px-6 py-3 font-semibold text-text-primary shadow-lg ring-1 ring-border-default/50 backdrop-blur-sm transition-colors hover:bg-bg-elevated"
         >
           Sign In
         </Link>
       </div>
+
     </main>
   );
 }
