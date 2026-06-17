@@ -28,6 +28,7 @@ services:
       - PORT=3000
       - OPENCAGE_API_KEY=${OPENCAGE_API_KEY}
       - JWT_SECRET=${JWT_SECRET}
+      - FRONTEND_ORIGIN=${FRONTEND_ORIGIN:-https://wayline.vercel.app}
 
   frontend:
     container_name: wayline_frontend

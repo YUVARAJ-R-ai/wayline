@@ -19,6 +19,7 @@ services:
       - OSRM_URL=http://routing_engine:5000
       - PORT=3000
       - OPENCAGE_API_KEY=${OPENCAGE_API_KEY}
+      - FRONTEND_ORIGIN=${FRONTEND_ORIGIN:-http://localhost:8080}
   # 2. The Next.js Frontend Service (no changes)
   frontend:
     container_name: wayline_frontend
