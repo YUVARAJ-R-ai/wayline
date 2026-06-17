@@ -1,4 +1,6 @@
 @import "tailwindcss";
+@import "../styles/tokens.css";
+
 html,
 body,
 #__next {
@@ -7,27 +9,53 @@ body,
   margin: 0;
   padding: 0;
 }
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: var(--bg-base);
+  --foreground: var(--text-primary);
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+  --color-background: var(--bg-base);
+  --color-foreground: var(--text-primary);
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --color-bg-base: var(--bg-base);
+  --color-bg-surface: var(--bg-surface);
+  --color-bg-elevated: var(--bg-elevated);
+  --color-bg-overlay: var(--bg-overlay);
+
+  --color-border-subtle: var(--border-subtle);
+  --color-border-default: var(--border-default);
+  --color-border-strong: var(--border-strong);
+
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-muted: var(--text-muted);
+  --color-text-disabled: var(--text-disabled);
+
+  --color-accent-purple: var(--accent-purple);
+  --color-accent-blue: var(--accent-blue);
+  --color-accent-purple-muted: var(--accent-purple-muted);
+
+  --color-status-success: var(--status-success);
+  --color-status-warning: var(--status-warning);
+  --color-status-error: var(--status-error);
+
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+
+  --shadow-glass: var(--shadow-glass);
+
+  --radius-sm: var(--radius-sm);
+  --radius-md: var(--radius-md);
+  --radius-lg: var(--radius-lg);
+  --radius-xl: var(--radius-xl);
+  --radius-2xl: var(--radius-2xl);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans);
 }
+
