@@ -13,7 +13,7 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // --- Middleware ---
-app.use(cors()); // <-- Enable CORS for all requests
+app.use(cors({ origin: [process.env.FRONTEND_ORIGIN, 'http://localhost:8080'], credentials: true }));
 app.use(express.json()); // <-- Middleware to parse JSON bodies
 
 // Middleware to authenticate JWT tokens
