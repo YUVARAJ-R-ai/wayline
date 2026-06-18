@@ -51,6 +51,12 @@ body,
   --radius-lg: var(--radius-lg);
   --radius-xl: var(--radius-xl);
   --radius-2xl: var(--radius-2xl);
+
+  --color-btn-signin-bg: var(--btn-signin-bg);
+  --color-btn-signin-text: var(--btn-signin-text);
+  --color-btn-signin-border: var(--btn-signin-border);
+  --color-btn-signin-hover: var(--btn-signin-hover);
+  --color-btn-primary-text: var(--btn-primary-text);
 }
 
 body {

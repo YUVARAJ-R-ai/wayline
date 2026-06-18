@@ -39,57 +39,72 @@
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 
   /* Light Theme Colors (Default) */
-  --bg-base: #ffffff;
-  --bg-surface: #f4f4f5;      /* zinc-100 */
-  --bg-elevated: #e4e4e7;     /* zinc-200 */
-  --bg-overlay: rgba(255, 255, 255, 0.75);
+  --bg-base: #eae6d8;         /* Warm Ivory/Sand base */
+  --bg-surface: #faf8f2;      /* Soft Cream card/panel surface */
+  --bg-elevated: #f4f0e6;     /* Elevated cream input/panel */
+  --bg-overlay: rgba(250, 248, 242, 0.75);
 
-  --border-subtle: #e4e4e7;   /* zinc-200 */
-  --border-default: #d4d4d8;  /* zinc-300 */
-  --border-strong: #a1a1aa;   /* zinc-500 */
+  --border-subtle: #dad6c9;   /* Soft beige-gray border */
+  --border-default: #c2beb2;  /* Medium gray border */
+  --border-strong: #8a877d;   /* Strong focus/separator border */
 
-  --text-primary: #09090b;    /* zinc-950 */
-  --text-secondary: #27272a;  /* zinc-800 */
-  --text-muted: #71717a;      /* zinc-500 */
-  --text-disabled: #a1a1aa;   /* zinc-400 */
+  --text-primary: #1c1d1a;    /* Deep warm charcoal */
+  --text-secondary: #5c5f56;  /* Olive-gray secondary text */
+  --text-muted: #8a8d82;      /* Muted sage text */
+  --text-disabled: #b0b3a8;   /* Disabled text */
 
-  --accent-purple: #7c3aed;   /* violet-600 */
-  --accent-blue: #2563eb;     /* blue-600 */
-  --accent-purple-muted: rgba(124, 58, 237, 0.08);
+  --accent-purple: #2c5e43;   /* Muted Forest Green (Brand Accent) */
+  --accent-blue: #1b3d29;     /* Deep Forest Green secondary */
+  --accent-purple-muted: rgba(44, 94, 67, 0.08);
 
-  --status-success: #059669;  /* emerald-600 */
-  --status-warning: #d97706;  /* amber-600 */
-  --status-error: #dc2626;    /* red-600 */
+  --status-success: #2e7d56;  /* Forest Success */
+  --status-warning: #c17c11;  /* Amber Warning */
+  --status-error: #b83a3a;    /* Red Error */
 
-  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
-  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.05), 0 4px 6px -2px rgba(0, 0, 0, 0.02);
-  --shadow-glass: 0 8px 32px 0 rgba(31, 38, 135, 0.04);
+  --shadow-sm: 0 1px 2px 0 rgba(44, 58, 44, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(44, 58, 44, 0.05), 0 2px 4px -1px rgba(44, 58, 44, 0.03);
+  --shadow-lg: 0 10px 15px -3px rgba(44, 58, 44, 0.05), 0 4px 6px -2px rgba(44, 58, 44, 0.02);
+  --shadow-glass: 0 8px 32px 0 rgba(44, 58, 44, 0.04);
+
+  /* Button Components */
+  --btn-signin-bg: var(--accent-purple);
+  --btn-signin-text: #ffffff;
+  --btn-signin-border: transparent;
+  --btn-signin-hover: var(--accent-blue);
+  --btn-primary-text: #ffffff;
 }
 
 /* Dark Theme Colors */
 [data-theme='dark'] {
-  --bg-base: #09090b;         /* Zinc-950 (deep charcoal) */
-  --bg-surface: #121214;      /* Graphite surface */
-  --bg-elevated: #1e1e21;     /* Elevated slate card surface */
-  --bg-overlay: rgba(9, 9, 11, 0.75);
+  --bg-base: #121310;         /* Deep olive-charcoal black */
+  --bg-surface: #1c1e1a;      /* Dark olive-charcoal surface */
+  --bg-elevated: #262823;     /* Warm dark slate/olive card surface */
+  --bg-overlay: rgba(18, 19, 16, 0.75);
 
-  --border-subtle: #1f1f23;   /* Slate borders */
-  --border-default: #2d2d34;  /* Default panel borders */
-  --border-strong: #4a4a55;   /* Strong focus/separator borders */
+  --border-subtle: #292b26;   /* Subtle dark olive-charcoal border */
+  --border-default: #3d4039;  /* Default panel border */
+  --border-strong: #54574e;   /* Strong separator border */
 
-  --text-primary: #f4f4f5;    /* zinc-100 */
-  --text-secondary: #d4d4d8;  /* zinc-300 */
-  --text-muted: #a1a1aa;      /* zinc-400 */
-  --text-disabled: #52525b;   /* zinc-600 */
+  --text-primary: #eae9e5;    /* Warm off-white primary text */
+  --text-secondary: #9ea298;  /* Muted sage/gray secondary text */
+  --text-muted: #777a72;      /* Muted text */
+  --text-disabled: #4a4d46;   /* Disabled text */
 
-  --accent-purple: #a78bfa;   /* violet-400 */
-  --accent-blue: #60a5fa;     /* blue-400 */
-  --accent-purple-muted: rgba(167, 139, 250, 0.12);
+  --accent-purple: #7ebd97;   /* Soft Sage / Olive-Green (Brand Accent) */
+  --accent-blue: #9cccad;     /* Light sage secondary */
+  --accent-purple-muted: rgba(126, 189, 151, 0.12);
 
-  --status-success: #10b981;  /* emerald-500 */
-  --status-warning: #f59e0b;  /* amber-500 */
-  --status-error: #ef4444;    /* red-500 */
+  --status-success: #10b981;  /* Muted emerald success */
+  --status-warning: #f59e0b;  /* Muted amber warning */
+  --status-error: #ef4444;    /* Muted red error */
+
+  /* Button Components overrides */
+  --btn-signin-bg: transparent;
+  --btn-signin-text: var(--accent-purple);
+  --btn-signin-border: var(--accent-purple);
+  --btn-signin-hover: rgba(126, 189, 151, 0.08);
+  --btn-primary-text: #121310;
+}
 
   --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.5);
   --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -1px rgba(0, 0, 0, 0.2);
