@@ -32,6 +32,9 @@ services:
       - /app/node_modules
     environment:
       - NEXT_PUBLIC_API_URL=http://localhost:3000
+      - BACKEND_URL=http://api-gateway:3000
+      - NEXTAUTH_URL=http://localhost:8080
+      - NEXTAUTH_SECRET=wayline_nextauth_secret_key_change_me
     depends_on:
       - api-gateway
 
