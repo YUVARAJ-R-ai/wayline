@@ -19,9 +19,12 @@ export default function DashboardLayout({
   // Redirect to login if unauthenticated
   useEffect(() => {
     if (status === "unauthenticated") {
-      router.replace("/login");
+      const loginUrl = pathname 
+        ? `/login?callbackUrl=${encodeURIComponent(pathname)}`
+        : "/login";
+      router.replace(loginUrl);
     }
-  }, [status, router]);
+  }, [status, router, pathname]);
 
   if (status === "loading" || status === "unauthenticated") {
     return (
