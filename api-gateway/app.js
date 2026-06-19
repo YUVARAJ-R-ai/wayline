@@ -39,8 +39,16 @@ const protectWithApiKey = async (req, res, next) => {
     const referer = req.headers['referer'];
     const origin = req.headers['origin'];
 
-    // Bypass API key authentication for requests originating from our frontend application
-    if ((referer && referer.startsWith('http://localhost:8080')) || (origin && origin === 'http://localhost:8080')) {
+    // Bypass API key authentication for requests originating from our frontend application.
+    // Checks both the FRONTEND_ORIGIN env var (set to the Vercel URL in production) and
+    // the local dev origin so that neither environment requires an API key for its own UI.
+    const frontendOrigin = process.env.FRONTEND_ORIGIN || 'http://localhost:8080';
+    const localOrigin = 'http://localhost:8080';
+    const isFrontendReferer = referer && (
+        referer.startsWith(frontendOrigin) || referer.startsWith(localOrigin)
+    );
+    const isFrontendOrigin = origin && (origin === frontendOrigin || origin === localOrigin);
+    if (isFrontendReferer || isFrontendOrigin) {
         return next();
     }
 
