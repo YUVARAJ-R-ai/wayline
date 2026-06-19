@@ -98,19 +98,35 @@ const pool = new Pool({
 // This endpoint now uses the service name `routing_engine` from docker-compose.yml
 app.get('/api/route', protectWithApiKey, async (req, res) => {
     const { from, to } = req.query;
-    if (!from || !to) { return res.status(400).send('Missing "from" or "to" query parameters.'); }
+    if (!from || !to) { return res.status(400).json({ error: 'Missing "from" or "to" query parameters.' }); }
+    
     const fromCoords = from.split(',');
     const toCoords = to.split(',');
-    if (fromCoords.length !== 2 || toCoords.length !== 2) { return res.status(400).send('Invalid coordinate format. Use "lon,lat".'); }
-    // The hostname 'routing_engine' is automatically resolved by Docker's internal DNS
-    const osrmUrl = `http://routing_engine:5000/route/v1/driving/${fromCoords[0]},${fromCoords[1]};${toCoords[0]},${toCoords[1]}?overview=full&geometries=geojson`;
+    
+    if (fromCoords.length !== 2 || toCoords.length !== 2) { 
+        return res.status(400).json({ error: 'Invalid coordinate format. Use "lon,lat".' }); 
+    }
+
+    const fromLon = parseFloat(fromCoords[0]);
+    const fromLat = parseFloat(fromCoords[1]);
+    const toLon = parseFloat(toCoords[0]);
+    const toLat = parseFloat(toCoords[1]);
+
+    if (isNaN(fromLon) || isNaN(fromLat) || isNaN(toLon) || isNaN(toLat)) {
+        return res.status(400).json({ error: 'Coordinates must be valid numbers.' });
+    }
+
+    // Use environment variable for OSRM URL or default to routing_engine
+    const baseUrl = process.env.OSRM_URL || 'http://routing_engine:5000';
+    const osrmUrl = `${baseUrl}/route/v1/driving/${fromLon},${fromLat};${toLon},${toLat}?overview=full&geometries=geojson`;
+    
     try {
         const response = await axios.get(osrmUrl);
         const route = response.data.routes[0].geometry;
         res.json(route);
     } catch (error) {
         console.error('Error fetching route from OSRM:', error.message);
-        res.status(500).send('Error calculating route.');
+        res.status(500).json({ error: 'Error calculating route.' });
     }
 });
 
