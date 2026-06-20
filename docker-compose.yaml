@@ -19,6 +19,7 @@ services:
       - OSRM_URL=http://routing_engine:5000
       - PORT=3000
       - OPENCAGE_API_KEY=${OPENCAGE_API_KEY}
+      - JWT_SECRET=${JWT_SECRET}
       - FRONTEND_ORIGIN=${FRONTEND_ORIGIN:-http://localhost:8080}
   # 2. The Next.js Frontend Service (no changes)
   frontend:
@@ -31,7 +32,11 @@ services:
       - ./frontend:/app
       - /app/node_modules
     environment:
-      - NEXT_PUBLIC_API_URL=http://localhost:3000
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:3000}
+      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
+      - NEXTAUTH_URL=${NEXTAUTH_URL:-http://localhost}
+      # Server-side calls from NextAuth to the api-gateway (Docker DNS).
+      - BACKEND_URL=${BACKEND_URL:-http://api-gateway:3000}
     depends_on:
       - api-gateway
 
