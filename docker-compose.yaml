@@ -17,6 +17,7 @@ services:
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres_db:5432/${POSTGRES_DB}
       - OSRM_URL=http://routing_engine:5000
+      - PELIAS_URL=http://pelias:3100
       - PORT=3000
       - OPENCAGE_API_KEY=${OPENCAGE_API_KEY}
       - JWT_SECRET=${JWT_SECRET}
