@@ -232,6 +232,49 @@ app.get('/api/roads', async (req, res) => {
     }
 });
 
+// Simple in-memory job store for ETL tasks
+const etlJobs = {};
+
+app.post('/api/data/import', protectWithApiKey, (req, res) => {
+    const { dataset_name, file_path, format } = req.body;
+    
+    if (!dataset_name || !file_path || !format) {
+        return res.status(400).json({ error: 'Missing dataset_name, file_path, or format.' });
+    }
+
+    const jobId = crypto.randomUUID();
+    etlJobs[jobId] = { status: 'running', dataset: dataset_name, start_time: new Date() };
+
+    // Invoke the ETL process in the background
+    const exec = require('child_process').exec;
+    // Assuming the python normalizer can be accessed or we use docker exec if this runs on host.
+    // For now we just mock the invocation or try to run python if available.
+    exec(`python ../etl/normalizer.py "${file_path}"`, (error, stdout, stderr) => {
+        if (error) {
+            console.error(`ETL Job ${jobId} error: ${error.message}`);
+            etlJobs[jobId].status = 'failed';
+            etlJobs[jobId].error = error.message;
+            return;
+        }
+        etlJobs[jobId].status = 'completed';
+        etlJobs[jobId].end_time = new Date();
+    });
+
+    return res.status(202).json({
+        message: 'ETL job started',
+        job_id: jobId,
+        status_url: `/api/data/import/status/${jobId}`
+    });
+});
+
+app.get('/api/data/import/status/:jobId', protectWithApiKey, (req, res) => {
+    const job = etlJobs[req.params.jobId];
+    if (!job) {
+        return res.status(404).json({ error: 'Job not found' });
+    }
+    return res.json(job);
+});
+
 // --- Auth Endpoints ---
 
 // POST /auth/register
