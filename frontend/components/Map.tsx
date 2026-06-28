@@ -27,7 +27,9 @@ const DEFAULT_CENTER: [number, number] = [13.0843, 80.2705];
 // too many to render at city scale, so we only fetch the current viewport once
 // the user is zoomed in enough for the data to be useful.
 const STREET_ZOOM_THRESHOLD = 14;
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
+// Empty default = same-origin: in production the browser hits /api/* on the
+// nginx host. NEXT_PUBLIC_API_URL is only set (to a full URL) in local dev.
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '';
 
 // Helper to create custom SVG pin icons
 const createCustomIcon = (color: string) => {

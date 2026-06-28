@@ -19,7 +19,9 @@ export default function ApiKeysPage() {
   const [showModal, setShowModal] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
+  // Empty default = same-origin: in production the browser hits /api/* on the
+  // nginx host. NEXT_PUBLIC_API_URL is only set (to a full URL) in local dev.
+  const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || "";
   const token = (session?.user as any)?.accessToken;
 
   // Fetch keys
