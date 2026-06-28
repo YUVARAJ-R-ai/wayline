@@ -24,7 +24,9 @@ export default function HomePageClient() {
     setLoading(true);
     setError(null);
 
-    const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
+    // Empty default = same-origin: in production the browser hits /api/* on the
+    // nginx host. NEXT_PUBLIC_API_URL is only set (to a full URL) in local dev.
+    const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || "";
 
     try {
       const res = await fetch(`${apiBaseUrl}/api/geocode?q=${encodeURIComponent(searchQuery)}`);
