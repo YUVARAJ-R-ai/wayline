@@ -17,9 +17,17 @@ interface MapProps {
   toPosition?: [number, number] | null;
   fromAddress?: string | null;
   toAddress?: string | null;
+  showStreets?: boolean;
+  apiKey?: string | null;
 }
 
 const DEFAULT_CENTER: [number, number] = [13.0843, 80.2705];
+
+// Below this zoom level the GCC street overlay is hidden — 94k streets are far
+// too many to render at city scale, so we only fetch the current viewport once
+// the user is zoomed in enough for the data to be useful.
+const STREET_ZOOM_THRESHOLD = 14;
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
 
 // Helper to create custom SVG pin icons
 const createCustomIcon = (color: string) => {
@@ -77,6 +85,64 @@ function MapClickEvents({ onMapClick }: { onMapClick?: (latlng: { lat: number; l
   return null;
 }
 
+// Greater Chennai Corporation street overlay. Fetches the streets within the
+// current viewport from /api/streets (bbox-filtered) whenever the map moves,
+// and only while zoomed in past STREET_ZOOM_THRESHOLD. Manages its own Leaflet
+// GeoJSON layer imperatively so it can be replaced cheaply on each pan/zoom.
+function StreetOverlay({ show, apiKey }: { show?: boolean; apiKey?: string | null }) {
+  const map = useMap();
+  const layerRef = useRef<L.GeoJSON | null>(null);
+
+  const clearLayer = () => {
+    if (layerRef.current) {
+      map.removeLayer(layerRef.current);
+      layerRef.current = null;
+    }
+  };
+
+  const refresh = async () => {
+    if (!show || map.getZoom() < STREET_ZOOM_THRESHOLD) {
+      clearLayer();
+      return;
+    }
+    const b = map.getBounds();
+    const bbox = `${b.getWest()},${b.getSouth()},${b.getEast()},${b.getNorth()}`;
+    const headers: Record<string, string> = {};
+    if (apiKey && apiKey.trim()) headers['x-api-key'] = apiKey.trim();
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/streets?bbox=${bbox}`, { headers });
+      if (!res.ok) return;
+      const data = await res.json();
+      clearLayer();
+      layerRef.current = L.geoJSON(data, {
+        style: { color: '#f59e0b', weight: 1.5, opacity: 0.7 },
+        onEachFeature: (feature, layer) => {
+          const p = feature.properties || {};
+          if (p.name) {
+            layer.bindTooltip(
+              `<strong>${p.name}</strong>${p.area ? ` · ${p.area}` : ''}${p.ward ? ` · Ward ${p.ward}` : ''}`,
+              { sticky: true }
+            );
+          }
+        }
+      }).addTo(map);
+    } catch {
+      // Overlay is best-effort; failures should never break the map.
+    }
+  };
+
+  useMapEvents({ moveend: refresh, zoomend: refresh });
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    refresh();
+    return () => clearLayer();
+  }, [show, apiKey]);
+
+  return null;
+}
+
 export default function Map({
   center = DEFAULT_CENTER,
   markerPosition = DEFAULT_CENTER,
@@ -86,7 +152,9 @@ export default function Map({
   fromPosition,
   toPosition,
   fromAddress,
-  toAddress
+  toAddress,
+  showStreets,
+  apiKey
 }: MapProps) {
   const markerRef = useRef<L.Marker>(null);
   const fromMarkerRef = useRef<L.Marker>(null);
@@ -125,6 +193,7 @@ export default function Map({
       <ChangeView center={center} zoom={13} />
       <FitRouteBounds polyline={polyline} />
       <MapClickEvents onMapClick={onMapClick} />
+      <StreetOverlay show={showStreets} apiKey={apiKey} />
       <ZoomControl position="bottomright" /> 
       
       <TileLayer

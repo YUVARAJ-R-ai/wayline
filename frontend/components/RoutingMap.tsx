@@ -49,6 +49,7 @@ export default function RoutingMap() {
   const [error, setError] = useState<string | null>(null);
   const [apiKey, setApiKey] = useState("");
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [showStreets, setShowStreets] = useState(false);
 
   const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
 
@@ -425,6 +426,37 @@ export default function RoutingMap() {
             </button>
           </div>
 
+          {/* Chennai street overlay toggle */}
+          <button
+            onClick={() => setShowStreets((v) => !v)}
+            className={`w-full flex items-center justify-between gap-2 px-3 py-2.5 rounded-xl text-xs font-bold border transition-all select-none ${
+              showStreets
+                ? "bg-accent-purple-muted border-accent-purple/30 text-accent-purple"
+                : "bg-bg-elevated border-border-default text-text-secondary hover:bg-bg-base"
+            }`}
+          >
+            <span className="flex items-center gap-1.5">
+              <MapPin className="h-3.5 w-3.5" />
+              Chennai Street Overlay
+            </span>
+            <span
+              className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors ${
+                showStreets ? "bg-accent-purple" : "bg-border-default"
+              }`}
+            >
+              <span
+                className={`inline-block h-3 w-3 transform rounded-full bg-white transition-transform ${
+                  showStreets ? "translate-x-3.5" : "translate-x-0.5"
+                }`}
+              />
+            </span>
+          </button>
+          {showStreets && (
+            <p className="text-[10px] text-text-muted leading-relaxed select-none -mt-2 px-1">
+              Showing GCC street data — zoom in past level {14} to render streets for the current view.
+            </p>
+          )}
+
           <div className="p-3 bg-accent-purple-muted border border-accent-purple/10 rounded-xl flex gap-2 select-none">
             <span className="text-xs">💡</span>
             <p className="text-[10px] text-text-secondary leading-relaxed">
@@ -445,6 +477,8 @@ export default function RoutingMap() {
           fromAddress={fromAddress}
           toAddress={toAddress}
           center={fromCoord || [13.0843, 80.2705]}
+          showStreets={showStreets}
+          apiKey={apiKey}
         />
       </div>
 

@@ -232,6 +232,49 @@ app.get('/api/roads', async (req, res) => {
     }
 });
 
+// GET /api/streets?bbox=minLng,minLat,maxLng,maxLat
+// Returns the Greater Chennai Corporation streets (loaded from the GCC_Streets
+// shapefile into PostGIS) that fall within the requested viewport, as GeoJSON.
+// Used by the dashboard map's street overlay; bbox-filtered + capped so the
+// browser never has to render all 94k streets at once.
+app.get('/api/streets', protectWithApiKey, async (req, res) => {
+    const { bbox } = req.query;
+    if (!bbox) {
+        return res.status(400).json({ error: 'Missing "bbox" query parameter (minLng,minLat,maxLng,maxLat).' });
+    }
+
+    const parts = bbox.split(',').map(Number);
+    if (parts.length !== 4 || parts.some(Number.isNaN)) {
+        return res.status(400).json({ error: 'Invalid bbox. Use "minLng,minLat,maxLng,maxLat".' });
+    }
+    const [minLng, minLat, maxLng, maxLat] = parts;
+
+    try {
+        const queryResult = await pool.query(
+            `SELECT road_name, area_name, ward, zone, ST_AsGeoJSON(geom)::json AS geometry
+             FROM gcc_streets
+             WHERE geom && ST_MakeEnvelope($1, $2, $3, $4, 4326)
+               AND NOT ST_IsEmpty(geom)
+             LIMIT 4000;`,
+            [minLng, minLat, maxLng, maxLat]
+        );
+        const features = queryResult.rows.map(row => ({
+            type: 'Feature',
+            properties: {
+                name: row.road_name,
+                area: row.area_name,
+                ward: row.ward,
+                zone: row.zone,
+            },
+            geometry: row.geometry,
+        }));
+        res.status(200).json({ type: 'FeatureCollection', features });
+    } catch (err) {
+        console.error('Street overlay query error:', err.stack);
+        res.status(500).json({ error: 'An error occurred while fetching street data.' });
+    }
+});
+
 // --- Auth Endpoints ---
 
 // POST /auth/register
