@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, ZoomControl, useMap } from 'react-leaflet'; 
+import { MapContainer, TileLayer, Marker, Popup, ZoomControl, useMap, useMapEvents, Polyline } from 'react-leaflet'; 
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import 'leaflet-defaulticon-compatibility/dist/leaflet-defaulticon-compatibility.webpack.css';
@@ -11,9 +11,33 @@ interface MapProps {
   center?: [number, number];
   markerPosition?: [number, number] | null;
   markerAddress?: string | null;
+  polyline?: Array<[number, number]>;
+  onMapClick?: (latlng: { lat: number; lng: number }) => void;
+  fromPosition?: [number, number] | null;
+  toPosition?: [number, number] | null;
+  fromAddress?: string | null;
+  toAddress?: string | null;
 }
 
 const DEFAULT_CENTER: [number, number] = [13.0843, 80.2705];
+
+// Helper to create custom SVG pin icons
+const createCustomIcon = (color: string) => {
+  if (typeof window === 'undefined') return undefined;
+  return L.divIcon({
+    html: `
+      <div style="display: flex; align-items: center; justify-content: center; width: 32px; height: 32px;">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="${color}" style="width: 32px; height: 32px; filter: drop-shadow(0 4px 3px rgb(0 0 0 / 0.3));">
+          <path fill-rule="evenodd" d="M11.54 22.351l.07.04.028.016a.76.76 0 00.723 0l.028-.015.071-.041a16.975 16.975 0 001.144-.742 19.58 19.58 0 002.683-2.282c1.944-1.99 3.963-4.98 3.963-8.827a8.25 8.25 0 00-16.5 0c0 3.846 2.02 6.837 3.963 8.827a19.58 19.58 0 002.682 2.282 16.975 16.975 0 001.145.742zM12 13.5a3.5 3.5 0 100-7 3.5 3.5 0 000 7z" clip-rule="evenodd" />
+        </svg>
+      </div>
+    `,
+    className: 'custom-leaflet-marker',
+    iconSize: [32, 32],
+    iconAnchor: [16, 32],
+    popupAnchor: [0, -32]
+  });
+};
 
 function ChangeView({ center, zoom }: { center: [number, number]; zoom: number }) {
   const map = useMap();
@@ -26,19 +50,69 @@ function ChangeView({ center, zoom }: { center: [number, number]; zoom: number }
   return null;
 }
 
+// Fit map bounds to the polyline route
+function FitRouteBounds({ polyline }: { polyline?: Array<[number, number]> }) {
+  const map = useMap();
+  useEffect(() => {
+    if (polyline && polyline.length > 0) {
+      const bounds = L.latLngBounds(polyline);
+      map.fitBounds(bounds, {
+        padding: [50, 50],
+        maxZoom: 15,
+        animate: true,
+        duration: 1.5
+      });
+    }
+  }, [polyline, map]);
+  return null;
+}
+
+// Capture map click events
+function MapClickEvents({ onMapClick }: { onMapClick?: (latlng: { lat: number; lng: number }) => void }) {
+  useMapEvents({
+    click(e) {
+      onMapClick?.(e.latlng);
+    }
+  });
+  return null;
+}
+
 export default function Map({
   center = DEFAULT_CENTER,
   markerPosition = DEFAULT_CENTER,
-  markerAddress = "Chennai, Tamil Nadu, India"
+  markerAddress = "Chennai, Tamil Nadu, India",
+  polyline,
+  onMapClick,
+  fromPosition,
+  toPosition,
+  fromAddress,
+  toAddress
 }: MapProps) {
   const markerRef = useRef<L.Marker>(null);
+  const fromMarkerRef = useRef<L.Marker>(null);
+  const toMarkerRef = useRef<L.Marker>(null);
 
+  // Auto-open popups on update
   useEffect(() => {
-    // Open the popup automatically when the marker position or address changes
-    if (markerRef.current) {
+    if (markerPosition && markerRef.current) {
       markerRef.current.openPopup();
     }
   }, [markerPosition, markerAddress]);
+
+  useEffect(() => {
+    if (fromPosition && fromMarkerRef.current) {
+      fromMarkerRef.current.openPopup();
+    }
+  }, [fromPosition, fromAddress]);
+
+  useEffect(() => {
+    if (toPosition && toMarkerRef.current) {
+      toMarkerRef.current.openPopup();
+    }
+  }, [toPosition, toAddress]);
+
+  const greenIcon = createCustomIcon('#2e7d56'); // status-success
+  const redIcon = createCustomIcon('#b83a3a');   // status-error
 
   return (
     <MapContainer 
@@ -49,6 +123,8 @@ export default function Map({
       zoomControl={false} // THIS LINE IS CRITICAL
     >
       <ChangeView center={center} zoom={13} />
+      <FitRouteBounds polyline={polyline} />
+      <MapClickEvents onMapClick={onMapClick} />
       <ZoomControl position="bottomright" /> 
       
       <TileLayer
@@ -56,7 +132,8 @@ export default function Map({
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
       />
       
-      {markerPosition && (
+      {/* Search landing marker */}
+      {markerPosition && !fromPosition && !toPosition && (
         <Marker position={markerPosition} ref={markerRef}>
           {markerAddress && (
             <Popup>
@@ -64,6 +141,31 @@ export default function Map({
             </Popup>
           )}
         </Marker>
+      )}
+
+      {/* From marker (green) */}
+      {fromPosition && (
+        <Marker position={fromPosition} icon={greenIcon} ref={fromMarkerRef}>
+          <Popup>
+            <span className="font-bold text-status-success">Start</span>
+            {fromAddress && <div className="text-xs text-text-secondary mt-1">{fromAddress}</div>}
+          </Popup>
+        </Marker>
+      )}
+
+      {/* To marker (red) */}
+      {toPosition && (
+        <Marker position={toPosition} icon={redIcon} ref={toMarkerRef}>
+          <Popup>
+            <span className="font-bold text-status-error">Destination</span>
+            {toAddress && <div className="text-xs text-text-secondary mt-1">{toAddress}</div>}
+          </Popup>
+        </Marker>
+      )}
+
+      {/* Polyline Route */}
+      {polyline && polyline.length > 0 && (
+        <Polyline positions={polyline} color="#3b82f6" weight={4} />
       )}
     </MapContainer>
   );

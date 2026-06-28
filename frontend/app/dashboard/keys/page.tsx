@@ -67,6 +67,9 @@ export default function ApiKeysPage() {
       if (res.ok) {
         const data = await res.json();
         setNewKey(data.key);
+        if (typeof window !== "undefined") {
+          window.localStorage.setItem("wayline_api_key", data.key);
+        }
         setShowModal(true);
         fetchKeys(); // Refresh list
       } else {
