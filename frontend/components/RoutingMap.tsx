@@ -99,15 +99,46 @@ export default function RoutingMap() {
         throw new Error("Could not calculate a driving route between these points.");
       }
 
-      const geom = await routeRes.json();
-      if (geom && geom.coordinates) {
-        // Reverse OSRM [lng, lat] coordinate pairs to [lat, lng] for Leaflet
-        const leafletCoords = geom.coordinates.map((c: [number, number]) => [c[1], c[0]]);
+      const responseData = await routeRes.json();
+      let leafletCoords: Array<[number, number]> = [];
+      let distanceKm = 0;
+      let durationMin = 0;
+      let gotStatsFromBackend = false;
+
+      // Case A: Response is full OSRM JSON containing routes
+      if (responseData && responseData.routes && responseData.routes[0]) {
+        const routeObj = responseData.routes[0];
+        const geometryObj = routeObj.geometry;
+        if (geometryObj && geometryObj.coordinates) {
+          leafletCoords = geometryObj.coordinates.map((c: [number, number]) => [c[1], c[0]]);
+        }
+        if (typeof routeObj.distance === "number" && typeof routeObj.duration === "number") {
+          distanceKm = routeObj.distance / 1000; // meters to km
+          durationMin = Math.round(routeObj.duration / 60); // seconds to min
+          gotStatsFromBackend = true;
+        }
+      }
+      // Case B: Response is geometry directly (as currently returned by gateway)
+      else if (responseData && responseData.coordinates) {
+        leafletCoords = responseData.coordinates.map((c: [number, number]) => [c[1], c[0]]);
+        // Check for root-level properties if gateway attaches them
+        if (typeof responseData.distance === "number" && typeof responseData.duration === "number") {
+          distanceKm = responseData.distance > 1000 ? responseData.distance / 1000 : responseData.distance;
+          durationMin = responseData.duration > 100 ? Math.round(responseData.duration / 60) : Math.round(responseData.duration);
+          gotStatsFromBackend = true;
+        }
+      }
+
+      if (leafletCoords.length > 0) {
         setRoutePoints(leafletCoords);
 
-        const distance = calculateDistance(leafletCoords);
-        const duration = Math.round((distance / 45) * 60); // 45 km/h driving speed approximation
-        setInfo({ distance, duration });
+        if (!gotStatsFromBackend) {
+          // Fallback to client-side math
+          distanceKm = calculateDistance(leafletCoords);
+          durationMin = Math.round((distanceKm / 45) * 60);
+        }
+
+        setInfo({ distance: distanceKm, duration: durationMin });
       } else {
         throw new Error("Route geometry not found in response.");
       }
