@@ -1,4 +1,4 @@
-# /wayline/docker-compose.yml
+# /wayline/docker-compose.yaml
 
 services:
   # 1. The Backend API Gateway Service (no changes)
@@ -85,7 +85,38 @@ services:
       - ./data/osrm-data:/data
     command: osrm-routed --algorithm mld /data/southern-zone-latest.osrm
 
-# --- ADD THIS SECTION AT THE END OF THE FILE ---
-# This defines the named volume we referenced above.
+  # 6. Elasticsearch — index store for Pelias geocoding (Phase 2)
+  elasticsearch:
+    image: elasticsearch:8.13.4
+    container_name: wayline_elasticsearch
+    environment:
+      - discovery.type=single-node
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
+      - xpack.security.enabled=false
+    ports:
+      - "9200:9200"
+    volumes:
+      - es_data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9200/_cluster/health || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 8
+
+  # 7. Pelias — custom geocoding engine (Phase 2)
+  pelias:
+    image: pelias/api:latest
+    container_name: wayline_pelias
+    ports:
+      - "3100:3100"
+    volumes:
+      - ./pelias.json:/etc/pelias/pelias.json:ro
+    environment:
+      - PELIAS_CONFIG=/etc/pelias/pelias.json
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+
 volumes:
   postgres_data:
+  es_data:
