@@ -149,34 +149,50 @@ const getMockGeocode = (q) => {
     return null;
 };
 
-// The geocoding endpoints remain largely the same.
-// For now, we'll keep the OpenCage API. This can be swapped for Pelias later.
+// --- Geocoding: Wayline's own engine, backed by Elasticsearch (no Nominatim) ---
+// Data is loaded into ES by the ETL normalizer (etl/normalizer.py). We query ES
+// directly rather than going through pelias/api, which needs its own schema and
+// a full microservice stack we don't run. ES_URL / GEO_INDEX are configurable;
+// getMockGeocode stays as a last-resort fallback so the UI never hard-fails.
+const ES_URL = process.env.ES_URL || 'http://elasticsearch:9200';
+const GEO_INDEX = process.env.GEO_INDEX || 'wayline_geo';
+
+// Build a human-readable label from an indexed document's properties.
+function geoLabel(src) {
+    const p = (src && src.properties) || {};
+    const parts = [p.road_name, p.area_name, p.corporatio || p.region].filter(Boolean);
+    return parts.length ? parts.join(', ') : null;
+}
+
 app.get('/api/geocode', protectWithApiKey, async (req, res) => {
     const { q } = req.query;
     if (!q) { return res.status(400).send('Missing search query "q".'); }
-    
-    const peliasUrl = process.env.PELIAS_URL || 'http://pelias:3100';
-    const url = `${peliasUrl}/v1/search?text=${encodeURIComponent(q)}&size=1`;
-    try {
-        const response = await axios.get(url);
-        const features = response.data.features;
-        if (features && features.length > 0) {
-            const result = features[0];
-            res.json({ lat: result.geometry.coordinates[1], lng: result.geometry.coordinates[0], address: result.properties.label || result.properties.name });
-        } else {
-            const mock = getMockGeocode(q);
-            if (mock) {
-                return res.json(mock);
+
+    const body = {
+        size: 1,
+        query: {
+            multi_match: {
+                query: q,
+                fields: ['properties.road_name^3', 'properties.area_name', 'properties.ward'],
+                type: 'best_fields',
+                fuzziness: 'AUTO'
             }
-            res.status(404).send('Location not found.');
         }
+    };
+    try {
+        const response = await axios.post(`${ES_URL}/${GEO_INDEX}/_search`, body);
+        const hit = response.data.hits && response.data.hits.hits[0];
+        if (hit && hit._source.center_point) {
+            const cp = hit._source.center_point;
+            return res.json({ lat: cp.lat, lng: cp.lon, address: geoLabel(hit._source) || q });
+        }
+        const mock = getMockGeocode(q);
+        if (mock) { return res.json(mock); }
+        res.status(404).send('Location not found.');
     } catch (error) {
         console.error('Geocoding error:', error.message);
-        // Fallback to mock on errors
         const mock = getMockGeocode(q);
-        if (mock) {
-            return res.json(mock);
-        }
+        if (mock) { return res.json(mock); }
         res.status(500).send('Error during geocoding.');
     }
 });
@@ -184,22 +200,29 @@ app.get('/api/geocode', protectWithApiKey, async (req, res) => {
 app.get('/api/reverse-geocode', protectWithApiKey, async (req, res) => {
     const { lat, lng } = req.query;
     if (!lat || !lng) { return res.status(400).send('Missing "lat" or "lng" parameters.'); }
-    
-    const peliasUrl = process.env.PELIAS_URL || 'http://pelias:3100';
-    const url = `${peliasUrl}/v1/reverse?point.lat=${lat}&point.lon=${lng}&size=1`;
-    
+
+    const body = {
+        size: 1,
+        query: { match_all: {} },
+        sort: [{
+            _geo_distance: {
+                center_point: { lat: parseFloat(lat), lon: parseFloat(lng) },
+                order: 'asc',
+                unit: 'm'
+            }
+        }]
+    };
     try {
-        const response = await axios.get(url);
-        const features = response.data.features;
-        if (features && features.length > 0) {
-            const result = features[0];
-            res.json({ address: result.properties.label || result.properties.name });
-        } else {
-            res.json({ address: `Mock Address at ${lat}, ${lng}` });
+        const response = await axios.post(`${ES_URL}/${GEO_INDEX}/_search`, body);
+        const hit = response.data.hits && response.data.hits.hits[0];
+        if (hit) {
+            const distance = Array.isArray(hit.sort) ? Math.round(hit.sort[0]) : null;
+            return res.json({ address: geoLabel(hit._source) || `Near ${lat}, ${lng}`, distance_m: distance });
         }
+        res.json({ address: `Near ${lat}, ${lng}` });
     } catch (error) {
         console.error('Reverse geocoding error:', error.message);
-        res.json({ address: `Mock Address at ${lat}, ${lng}` });
+        res.json({ address: `Near ${lat}, ${lng}` });
     }
 });
 

@@ -14,10 +14,13 @@ services:
     depends_on:
       postgres_db:
         condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres_db:5432/${POSTGRES_DB}
       - OSRM_URL=http://routing_engine:5000
-      - PELIAS_URL=http://pelias:3100
+      - ES_URL=http://elasticsearch:9200
+      - GEO_INDEX=wayline_geo
       - PORT=3000
       - OPENCAGE_API_KEY=${OPENCAGE_API_KEY}
       - JWT_SECRET=${JWT_SECRET}
@@ -86,7 +89,9 @@ services:
       - ./data/osrm-data:/data
     command: osrm-routed --algorithm mld /data/southern-zone-latest.osrm
 
-  # 6. Elasticsearch — index store for Pelias geocoding (Phase 2)
+  # 6. Elasticsearch — backing store for Wayline's own geocoding engine.
+  # The api-gateway queries this directly (/api/geocode, /api/reverse-geocode);
+  # data is loaded by the ETL normalizer (etl/normalizer.py).
   elasticsearch:
     image: elasticsearch:8.13.4
     container_name: wayline_elasticsearch
@@ -103,20 +108,6 @@ services:
       interval: 15s
       timeout: 10s
       retries: 8
-
-  # 7. Pelias — custom geocoding engine (Phase 2)
-  pelias:
-    image: pelias/api:latest
-    container_name: wayline_pelias
-    ports:
-      - "3100:3100"
-    volumes:
-      - ./pelias.json:/etc/pelias/pelias.json:ro
-    environment:
-      - PELIAS_CONFIG=/etc/pelias/pelias.json
-    depends_on:
-      elasticsearch:
-        condition: service_healthy
 
 volumes:
   postgres_data:

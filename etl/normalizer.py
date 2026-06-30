@@ -7,6 +7,74 @@ import geopandas as gpd
 from shapely.geometry import shape, mapping
 from elasticsearch import Elasticsearch, helpers
 
+# Elasticsearch index definition for the Wayline geocoder. The two things the
+# dynamic-mapping default got wrong are fixed here: center_point must be a
+# geo_point (so reverse-geocode / geo_distance works) and geometry a geo_shape.
+# Everything under properties.* stays generic via a dynamic template, so this
+# loader still works for any dataset — each string field gets an edge-ngram
+# analyzer for type-ahead plus a .keyword sub-field for exact match / sorting.
+GEO_INDEX_BODY = {
+    "settings": {
+        "analysis": {
+            "tokenizer": {
+                "edge_ngram_tokenizer": {
+                    "type": "edge_ngram",
+                    "min_gram": 2,
+                    "max_gram": 20,
+                    "token_chars": ["letter", "digit"],
+                }
+            },
+            "analyzer": {
+                "autocomplete_index": {
+                    "tokenizer": "edge_ngram_tokenizer",
+                    "filter": ["lowercase"],
+                },
+                "autocomplete_search": {
+                    "tokenizer": "lowercase",
+                },
+            },
+        }
+    },
+    "mappings": {
+        "properties": {
+            "center_point": {"type": "geo_point", "ignore_malformed": True},
+            "geometry": {"type": "geo_shape", "ignore_malformed": True},
+            "dataset": {"type": "keyword"},
+            "geometry_type": {"type": "keyword"},
+            "indexed_at": {"type": "date"},
+        },
+        "dynamic_templates": [
+            {
+                "property_strings": {
+                    "path_match": "properties.*",
+                    "match_mapping_type": "string",
+                    "mapping": {
+                        "type": "text",
+                        "analyzer": "autocomplete_index",
+                        "search_analyzer": "autocomplete_search",
+                        "fields": {"keyword": {"type": "keyword", "ignore_above": 256}},
+                    },
+                }
+            }
+        ],
+    },
+}
+
+
+def ensure_index(es, index_name, recreate=False):
+    """Create the geocoding index with the correct geo mappings if needed."""
+    exists = es.indices.exists(index=index_name)
+    if exists and recreate:
+        print(f"Dropping existing index '{index_name}' (--recreate)...")
+        es.indices.delete(index=index_name)
+        exists = False
+    if not exists:
+        print(f"Creating index '{index_name}' with geo_point/geo_shape mappings...")
+        es.indices.create(index=index_name, body=GEO_INDEX_BODY)
+    else:
+        print(f"Index '{index_name}' already exists — appending to it.")
+
+
 def normalize_geometry(geom):
     """
     Simplify geometry if it is a polygon and too complex.
@@ -19,7 +87,7 @@ def normalize_geometry(geom):
         return geom.simplify(0.001, preserve_topology=True)
     return geom
 
-def process_file(file_path, index_name, es_url):
+def process_file(file_path, index_name, es_url, recreate=False):
     print(f"Loading data from {file_path}...")
     try:
         # geopandas uses fiona under the hood to read shapefiles, geojson, postgis, and csv (if correctly specified)
@@ -58,7 +126,8 @@ def process_file(file_path, index_name, es_url):
     indexed_at = datetime.datetime.utcnow().isoformat()
     
     es = Elasticsearch(es_url)
-    
+    ensure_index(es, index_name, recreate=recreate)
+
     def generate_actions(gdf):
         for idx, row in gdf.iterrows():
             geom = mapping(row['geometry']) if row['geometry'] else None
@@ -85,17 +154,21 @@ def process_file(file_path, index_name, es_url):
             }
 
     print("Bulk indexing to Elasticsearch...")
-    try:
-        success, failed = helpers.bulk(es, generate_actions(gdf), chunk_size=500)
-        print(f"Indexed {success} documents successfully.")
-    except Exception as e:
-        print(f"Failed to index: {e}")
+    # raise_on_error=False so a handful of malformed geometries don't abort the
+    # whole load; we report how many failed instead.
+    success, errors = helpers.bulk(
+        es, generate_actions(gdf), chunk_size=500, raise_on_error=False
+    )
+    print(f"Indexed {success} documents successfully.")
+    if errors:
+        print(f"WARNING: {len(errors)} documents failed to index (e.g. malformed geometry).")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Wayline Dynamic ETL Normalizer")
     parser.add_argument("file_path", help="Path to the spatial file (CSV, SHP, GeoJSON, etc.)")
-    parser.add_argument("--index", default="pelias", help="Elasticsearch index name (default: pelias)")
+    parser.add_argument("--index", default=os.environ.get("GEO_INDEX", "wayline_geo"), help="Elasticsearch index name (default: wayline_geo)")
     parser.add_argument("--es-url", default=os.environ.get("ES_URL", "http://elasticsearch:9200"), help="Elasticsearch URL")
-    
+    parser.add_argument("--recreate", action="store_true", help="Drop and recreate the index before loading.")
+
     args = parser.parse_args()
-    process_file(args.file_path, args.index, args.es_url)
+    process_file(args.file_path, args.index, args.es_url, recreate=args.recreate)
