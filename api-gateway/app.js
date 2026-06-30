@@ -155,21 +155,14 @@ app.get('/api/geocode', protectWithApiKey, async (req, res) => {
     const { q } = req.query;
     if (!q) { return res.status(400).send('Missing search query "q".'); }
     
-    const apiKey = process.env.OPENCAGE_API_KEY;
-    if (!apiKey || apiKey === 'your_opencage_api_key') {
-        const mock = getMockGeocode(q);
-        if (mock) {
-            return res.json(mock);
-        }
-        return res.status(404).send('Location not found (no mock fallback matched).');
-    }
-
-    const url = `https://api.opencagedata.com/geocode/v1/json?q=${encodeURIComponent(q)}&key=${apiKey}&limit=1`;
+    const peliasUrl = process.env.PELIAS_URL || 'http://pelias:3100';
+    const url = `${peliasUrl}/v1/search?text=${encodeURIComponent(q)}&size=1`;
     try {
         const response = await axios.get(url);
-        const result = response.data.results[0];
-        if (result) {
-            res.json({ lat: result.geometry.lat, lng: result.geometry.lng, address: result.formatted });
+        const features = response.data.features;
+        if (features && features.length > 0) {
+            const result = features[0];
+            res.json({ lat: result.geometry.coordinates[1], lng: result.geometry.coordinates[0], address: result.properties.label || result.properties.name });
         } else {
             const mock = getMockGeocode(q);
             if (mock) {
@@ -179,7 +172,7 @@ app.get('/api/geocode', protectWithApiKey, async (req, res) => {
         }
     } catch (error) {
         console.error('Geocoding error:', error.message);
-        // Fallback to mock on OpenCage errors (e.g. 401 Unauthorized, rate limit, etc.)
+        // Fallback to mock on errors
         const mock = getMockGeocode(q);
         if (mock) {
             return res.json(mock);
@@ -192,17 +185,15 @@ app.get('/api/reverse-geocode', protectWithApiKey, async (req, res) => {
     const { lat, lng } = req.query;
     if (!lat || !lng) { return res.status(400).send('Missing "lat" or "lng" parameters.'); }
     
-    const apiKey = process.env.OPENCAGE_API_KEY;
-    if (!apiKey || apiKey === 'your_opencage_api_key') {
-        return res.json({ address: `Mock Address at ${lat}, ${lng}` });
-    }
-
-    const url = `https://api.opencagedata.com/geocode/v1/json?q=${lat}+${lng}&key=${apiKey}&limit=1`;
+    const peliasUrl = process.env.PELIAS_URL || 'http://pelias:3100';
+    const url = `${peliasUrl}/v1/reverse?point.lat=${lat}&point.lon=${lng}&size=1`;
+    
     try {
         const response = await axios.get(url);
-        const result = response.data.results[0];
-        if (result) {
-            res.json({ address: result.formatted });
+        const features = response.data.features;
+        if (features && features.length > 0) {
+            const result = features[0];
+            res.json({ address: result.properties.label || result.properties.name });
         } else {
             res.json({ address: `Mock Address at ${lat}, ${lng}` });
         }
