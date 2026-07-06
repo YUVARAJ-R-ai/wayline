@@ -102,13 +102,13 @@ def process_file(file_path, index_name, es_url, recreate=False):
             if lat_col and lon_col:
                 gdf = gpd.GeoDataFrame(df, geometry=gpd.points_from_xy(df[lon_col], df[lat_col]), crs="EPSG:4326")
             else:
-                print("Could not detect lat/lon columns for CSV.")
-                sys.exit(1)
+                raise ValueError("Could not detect lat/lon columns for CSV.")
         else:
             gdf = gpd.read_file(file_path)
     except Exception as e:
-        print(f"Error loading file: {e}")
-        sys.exit(1)
+        # Raise instead of sys.exit so this is safe to call from the HTTP runner
+        # (server.py) as well as the CLI; the CLI wrapper below turns it into exit 1.
+        raise RuntimeError(f"Error loading file '{file_path}': {e}") from e
 
     print(f"Loaded {len(gdf)} records.")
     
@@ -163,6 +163,14 @@ def process_file(file_path, index_name, es_url, recreate=False):
     if errors:
         print(f"WARNING: {len(errors)} documents failed to index (e.g. malformed geometry).")
 
+    return {
+        "dataset": dataset_name,
+        "index": index_name,
+        "records_read": int(len(gdf)),
+        "indexed": int(success),
+        "failed": len(errors) if errors else 0,
+    }
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Wayline Dynamic ETL Normalizer")
     parser.add_argument("file_path", help="Path to the spatial file (CSV, SHP, GeoJSON, etc.)")
@@ -171,4 +179,8 @@ if __name__ == "__main__":
     parser.add_argument("--recreate", action="store_true", help="Drop and recreate the index before loading.")
 
     args = parser.parse_args()
-    process_file(args.file_path, args.index, args.es_url, recreate=args.recreate)
+    try:
+        process_file(args.file_path, args.index, args.es_url, recreate=args.recreate)
+    except Exception as e:
+        print(f"ETL failed: {e}")
+        sys.exit(1)

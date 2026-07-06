@@ -290,47 +290,50 @@ app.get('/api/streets', protectWithApiKey, async (req, res) => {
 });
 
 // --- Dynamic data import (ETL) ---
-// Simple in-memory job store for ETL tasks
-const etlJobs = {};
+// The api-gateway image has no Python/GDAL, so it delegates the actual load to
+// the etl_runner service (etl/server.py) over the internal Docker network.
+const ETL_RUNNER_URL = process.env.ETL_RUNNER_URL || 'http://etl_runner:5055';
 
-app.post('/api/data/import', protectWithApiKey, (req, res) => {
-    const { dataset_name, file_path, format } = req.body;
+app.post('/api/data/import', protectWithApiKey, async (req, res) => {
+    const { dataset_name, file_path, format, recreate } = req.body;
 
-    if (!dataset_name || !file_path || !format) {
-        return res.status(400).json({ error: 'Missing dataset_name, file_path, or format.' });
+    if (!file_path) {
+        return res.status(400).json({ error: 'Missing file_path.' });
     }
 
-    const jobId = crypto.randomUUID();
-    etlJobs[jobId] = { status: 'running', dataset: dataset_name, start_time: new Date() };
-
-    // Invoke the ETL process in the background
-    const exec = require('child_process').exec;
-    // Assuming the python normalizer can be accessed or we use docker exec if this runs on host.
-    // For now we just mock the invocation or try to run python if available.
-    exec(`python ../etl/normalizer.py "${file_path}"`, (error, stdout, stderr) => {
-        if (error) {
-            console.error(`ETL Job ${jobId} error: ${error.message}`);
-            etlJobs[jobId].status = 'failed';
-            etlJobs[jobId].error = error.message;
-            return;
+    try {
+        const runner = await axios.post(`${ETL_RUNNER_URL}/run`, {
+            file_path,
+            dataset_name,
+            format,
+            recreate: !!recreate,
+        });
+        return res.status(202).json({
+            message: 'ETL job started',
+            job_id: runner.data.job_id,
+            status_url: `/api/data/import/status/${runner.data.job_id}`,
+        });
+    } catch (err) {
+        // Surface the runner's own validation errors (bad/traversing path, etc.).
+        if (err.response) {
+            return res.status(err.response.status).json(err.response.data);
         }
-        etlJobs[jobId].status = 'completed';
-        etlJobs[jobId].end_time = new Date();
-    });
-
-    return res.status(202).json({
-        message: 'ETL job started',
-        job_id: jobId,
-        status_url: `/api/data/import/status/${jobId}`
-    });
+        console.error('ETL runner unreachable:', err.message);
+        return res.status(502).json({ error: 'ETL runner is unavailable.' });
+    }
 });
 
-app.get('/api/data/import/status/:jobId', protectWithApiKey, (req, res) => {
-    const job = etlJobs[req.params.jobId];
-    if (!job) {
-        return res.status(404).json({ error: 'Job not found' });
+app.get('/api/data/import/status/:jobId', protectWithApiKey, async (req, res) => {
+    try {
+        const runner = await axios.get(`${ETL_RUNNER_URL}/status/${req.params.jobId}`);
+        return res.json(runner.data);
+    } catch (err) {
+        if (err.response) {
+            return res.status(err.response.status).json(err.response.data);
+        }
+        console.error('ETL runner unreachable:', err.message);
+        return res.status(502).json({ error: 'ETL runner is unavailable.' });
     }
-    return res.json(job);
 });
 
 // --- Auth Endpoints ---
