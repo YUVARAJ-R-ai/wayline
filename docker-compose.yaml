@@ -22,7 +22,6 @@ services:
       - ES_URL=http://elasticsearch:9200
       - GEO_INDEX=wayline_geo
       - PORT=3000
-      - OPENCAGE_API_KEY=${OPENCAGE_API_KEY}
       - JWT_SECRET=${JWT_SECRET}
       - FRONTEND_ORIGIN=${FRONTEND_ORIGIN:-http://localhost:8080}
   # 2. The Next.js Frontend Service (no changes)

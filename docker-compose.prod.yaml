@@ -33,7 +33,6 @@ services:
       - GEO_INDEX=wayline_geo
       # ETL runner used by POST /api/data/import (internal network only).
       - ETL_RUNNER_URL=http://etl_runner:5055
-      - OPENCAGE_API_KEY=${OPENCAGE_API_KEY}
       - JWT_SECRET=${JWT_SECRET}
       - FRONTEND_ORIGIN=${FRONTEND_ORIGIN:-https://wayline.vercel.app}
 
