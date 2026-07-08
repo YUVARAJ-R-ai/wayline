@@ -22,11 +22,17 @@ services:
     depends_on:
       postgres_db:
         condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres_db:5432/${POSTGRES_DB}
       - OSRM_URL=http://routing_engine:5000
       - PORT=3000
-      - OPENCAGE_API_KEY=${OPENCAGE_API_KEY}
+      # Wayline's own geocoder: the api-gateway queries Elasticsearch directly.
+      - ES_URL=http://elasticsearch:9200
+      - GEO_INDEX=wayline_geo
+      # ETL runner used by POST /api/data/import (internal network only).
+      - ETL_RUNNER_URL=http://etl_runner:5055
       - JWT_SECRET=${JWT_SECRET}
       - FRONTEND_ORIGIN=${FRONTEND_ORIGIN:-https://wayline.vercel.app}
 
@@ -92,6 +98,49 @@ services:
       - ${OSRM_DATA_DIR:-./data/osrm-data}:/data
     command: osrm-routed --algorithm mld /data/southern-zone-latest.osrm
 
+  # Elasticsearch — backing store for Wayline's own geocoding engine.
+  # Internal-only: NOT published to the host (unlike the dev compose), so it is
+  # reachable solely by the api-gateway and etl_runner over the Docker network.
+  elasticsearch:
+    image: elasticsearch:8.13.4
+    container_name: wayline_elasticsearch
+    restart: unless-stopped
+    environment:
+      - discovery.type=single-node
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
+      - xpack.security.enabled=false
+    expose:
+      - "9200"
+    volumes:
+      - es_data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9200/_cluster/health || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 8
+
+  # ETL runner — HTTP wrapper around the Python/GDAL normalizer. Backs
+  # POST /api/data/import. Internal-only; reads source files from IMPORT_DATA_DIR
+  # (mounted read-only). Long-lived, so it overrides the image's CLI entrypoint.
+  etl_runner:
+    build:
+      context: ./etl
+    container_name: wayline_etl_runner
+    restart: unless-stopped
+    entrypoint: ["python", "server.py"]
+    expose:
+      - "5055"
+    environment:
+      - ES_URL=http://elasticsearch:9200
+      - GEO_INDEX=wayline_geo
+      - IMPORT_DATA_DIR=/imports
+      - PORT=5055
+    volumes:
+      - ${IMPORT_DATA_DIR:-./data/imports}:/imports:ro
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+
   # Nginx reverse proxy: the only service that publishes to the host.
   # Serves the frontend on :80 and routes /api/* + /auth/* to the api-gateway,
   # while keeping /api/auth/* (NextAuth) on the frontend.
@@ -109,3 +158,4 @@ services:
 
 volumes:
   postgres_data:
+  es_data:
