@@ -84,3 +84,15 @@ Fetch your assigned issue from Backlog, get a detailed user story, create your f
 ```
 
 When the user types `/start-task`, invoke the Skill tool with `skill: "start-task"` before doing anything else.
+
+## /frontend-design
+**Who uses it:** Frontend developer (Indhra) or anyone building or styling UI components, pages, dashboard views, or map interfaces.
+
+Create distinctive, production-grade frontend interfaces with high design quality that avoid generic AI aesthetics. Focuses on creative visual direction, responsive layout, glassmorphic styling, and polished micro-interactions.
+
+```
+/frontend-design
+```
+
+When the user types `/frontend-design`, invoke the Skill tool with `skill: "frontend-design"` before doing anything else.
+
