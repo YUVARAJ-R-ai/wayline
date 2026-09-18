@@ -30,6 +30,7 @@ import {
   PremiumButton,
   Badge,
   Toast,
+  InteractiveDotGrid,
 } from "@/components/ui";
 import { ThemeToggle } from "@/components/ThemeProvider";
 
@@ -106,8 +107,8 @@ func main() {
         onClose={() => setToastMessage(null)}
       />
 
-      {/* Subtle Background Mesh Texture */}
-      <div className="pointer-events-none fixed inset-0 z-0 bg-[radial-gradient(#1f2923_1px,transparent_1px)] [background-size:24px_24px] opacity-25" />
+      {/* Interactive Cursor-Sensitive Dot Grid (Dark & Light) */}
+      <InteractiveDotGrid />
 
       {/* --- 1. STICKY TOP NAVIGATION --- */}
       <header className="sticky top-0 z-40 w-full border-b border-border-subtle bg-bg-base/90 backdrop-blur-md">

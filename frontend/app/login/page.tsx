@@ -4,7 +4,7 @@ import { useState, useEffect, Suspense } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { WaylineLogo, PremiumButton } from "@/components/ui";
+import { WaylineLogo, PremiumButton, InteractiveDotGrid } from "@/components/ui";
 import { ArrowLeft, Check, Lock, Mail, User } from "lucide-react";
 
 function LoginForm() {
@@ -227,16 +227,19 @@ function LoginForm() {
 
 export default function LoginPage() {
   return (
-    <div className="flex items-center justify-center min-h-screen bg-bg-base px-4 py-8 antialiased">
-      <Suspense
-        fallback={
-          <div className="w-full max-w-md p-8 bg-bg-surface border border-border-default rounded-3xl shadow-2xl flex flex-col items-center justify-center min-h-[350px]">
-            <div className="animate-spin rounded-full h-8 w-8 border-2 border-accent-purple border-t-transparent" />
-          </div>
-        }
-      >
-        <LoginForm />
-      </Suspense>
+    <div className="flex items-center justify-center min-h-screen bg-bg-base px-4 py-8 antialiased relative overflow-hidden">
+      <InteractiveDotGrid />
+      <div className="relative z-10 w-full max-w-md">
+        <Suspense
+          fallback={
+            <div className="w-full max-w-md p-8 bg-bg-surface border border-border-default rounded-3xl shadow-2xl flex flex-col items-center justify-center min-h-[350px]">
+              <div className="animate-spin rounded-full h-8 w-8 border-2 border-accent-purple border-t-transparent" />
+            </div>
+          }
+        >
+          <LoginForm />
+        </Suspense>
+      </div>
     </div>
   );
 }

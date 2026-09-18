@@ -15,3 +15,5 @@ export type { ToastProps } from "./Toast";
 
 export { default as WaylineLogo } from "./WaylineLogo";
 export type { WaylineLogoProps } from "./WaylineLogo";
+
+export { default as InteractiveDotGrid } from "./InteractiveDotGrid";
