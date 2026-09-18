@@ -4,7 +4,7 @@ import { useSession } from "next-auth/react";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
 import Link from "next/link";
-import { LayoutGrid, Key, Settings, User } from "lucide-react";
+import { LayoutGrid, Map, BarChart3, Key, Settings, User } from "lucide-react";
 import { SignOutButton } from "@/components/SignOutButton";
 import { WaylineLogo } from "@/components/ui";
 
@@ -37,7 +37,11 @@ export default function DashboardLayout({
 
   // Determine section breadcrumb/title based on path
   const sectionTitle =
-    pathname === "/dashboard/keys"
+    pathname === "/dashboard/explorer"
+      ? "Spatial Explorer & Layers"
+      : pathname === "/dashboard/analytics"
+      ? "Usage Analytics & Telemetry"
+      : pathname === "/dashboard/keys"
       ? "API Keys"
       : pathname === "/dashboard/settings"
       ? "Settings & Profile"
@@ -57,7 +61,7 @@ export default function DashboardLayout({
       
       {/* Side Navigation Rail */}
       <aside className="w-16 h-screen bg-bg-surface border-r border-border-subtle flex flex-col items-center py-5 justify-between flex-shrink-0 z-20 fixed left-0 top-0 select-none">
-        <div className="flex flex-col items-center gap-7 w-full">
+        <div className="flex flex-col items-center gap-6 w-full">
           
           {/* Logo container */}
           <Link href="/" className="hover:opacity-90 transition-all p-1" title="Wayline Home">
@@ -65,10 +69,10 @@ export default function DashboardLayout({
           </Link>
 
           {/* Navigation Items */}
-          <nav className="flex flex-col items-center gap-3 w-full">
+          <nav className="flex flex-col items-center gap-2.5 w-full">
             <Link 
               href="/dashboard" 
-              title="Overview & Map Console"
+              title="Overview & Console"
               className={`relative p-2.5 rounded-xl transition-all group flex items-center justify-center ${
                 pathname === "/dashboard" 
                   ? "text-accent-purple bg-accent-purple-muted border border-accent-purple/20" 
@@ -76,6 +80,30 @@ export default function DashboardLayout({
               }`}
             >
               <LayoutGrid className="w-5 h-5" />
+            </Link>
+
+            <Link 
+              href="/dashboard/explorer" 
+              title="Spatial Layers & Explorer"
+              className={`relative p-2.5 rounded-xl transition-all group flex items-center justify-center ${
+                pathname === "/dashboard/explorer" 
+                  ? "text-accent-purple bg-accent-purple-muted border border-accent-purple/20" 
+                  : "text-text-muted hover:text-text-primary hover:bg-bg-elevated"
+              }`}
+            >
+              <Map className="w-5 h-5" />
+            </Link>
+
+            <Link 
+              href="/dashboard/analytics" 
+              title="Usage Analytics & Telemetry"
+              className={`relative p-2.5 rounded-xl transition-all group flex items-center justify-center ${
+                pathname === "/dashboard/analytics" 
+                  ? "text-accent-purple bg-accent-purple-muted border border-accent-purple/20" 
+                  : "text-text-muted hover:text-text-primary hover:bg-bg-elevated"
+              }`}
+            >
+              <BarChart3 className="w-5 h-5" />
             </Link>
 
             <Link 

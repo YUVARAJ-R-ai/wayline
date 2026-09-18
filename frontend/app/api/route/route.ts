@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { recordKeyUsage } from "@/lib/apiKeyStore";
 
+export const dynamic = "force-dynamic";
+
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const from = searchParams.get("from");
