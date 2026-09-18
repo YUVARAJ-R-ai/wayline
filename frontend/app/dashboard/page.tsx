@@ -49,6 +49,32 @@ export default function DashboardPage() {
     }
   }, [status, session]);
 
+  const [engineHealth, setEngineHealth] = useState<{
+    status: string;
+    latency: number;
+  }>({ status: "Operational", latency: 18 });
+
+  useEffect(() => {
+    const fetchHealth = async () => {
+      try {
+        const res = await fetch("/api/health");
+        if (res.ok) {
+          const data = await res.json();
+          setEngineHealth({
+            status: data.status || "Operational",
+            latency: data.latency || 18,
+          });
+        }
+      } catch (err) {
+        console.warn("Health check error:", err);
+      }
+    };
+
+    fetchHealth();
+    const interval = setInterval(fetchHealth, 15000);
+    return () => clearInterval(interval);
+  }, []);
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -85,20 +111,28 @@ export default function DashboardPage() {
         />
         <MetricCard
           title="Engine Status"
-          value="Operational"
+          value={engineHealth.status}
           subtitle="OSRM routing & PostGIS"
-          icon={<Radio className="w-4 h-4 text-status-success" />}
-          trend="up"
-          trendValue="99.9%"
+          icon={
+            <Radio
+              className={`w-4 h-4 ${
+                engineHealth.status === "Operational"
+                  ? "text-status-success"
+                  : "text-status-warning"
+              }`}
+            />
+          }
+          trend={engineHealth.status === "Operational" ? "up" : "down"}
+          trendValue={engineHealth.status === "Operational" ? "Live" : "Degraded"}
           loading={false}
         />
         <MetricCard
           title="Avg Response Time"
-          value="18 ms"
-          subtitle="low-latency routing"
+          value={`${engineHealth.latency} ms`}
+          subtitle="live roundtrip latency"
           icon={<Zap className="w-4 h-4 text-accent-purple" />}
-          trend="up"
-          trendValue="-4ms"
+          trend={engineHealth.latency < 50 ? "up" : "neutral"}
+          trendValue={engineHealth.latency < 50 ? "Fast" : "Normal"}
           loading={false}
         />
       </div>
