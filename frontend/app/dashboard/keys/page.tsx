@@ -1,26 +1,34 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useSession } from "next-auth/react";
-import { Search } from "lucide-react";
+import { Search, Plus, Copy, Check, Trash2, Key, ShieldAlert } from "lucide-react";
+import { PremiumButton, Badge, Modal, Toast } from "@/components/ui";
 
 interface ApiKey {
   id: number;
   prefix: string;
   created_at: string;
   usage_count: number;
+  label?: string;
 }
 
 export default function ApiKeysPage() {
   const { data: session, status } = useSession();
   const [keys, setKeys] = useState<ApiKey[]>([]);
   const [loading, setLoading] = useState(true);
-  const [newKey, setNewKey] = useState<string | null>(null);
-  const [showModal, setShowModal] = useState(false);
+  const [generating, setGenerating] = useState(false);
+  const [deletingPrefix, setDeletingPrefix] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+
+  // Modal & notification states
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [keyLabel, setKeyLabel] = useState("");
+  const [generatedKey, setGeneratedKey] = useState<string | null>(null);
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // Empty default = same-origin: in production the browser hits /api/* on the
-  // nginx host. NEXT_PUBLIC_API_URL is only set (to a full URL) in local dev.
   const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || "";
   const token = (session?.user as any)?.accessToken;
 
@@ -52,39 +60,52 @@ export default function ApiKeysPage() {
   useEffect(() => {
     if (status === "authenticated" && token) {
       fetchKeys();
+    } else if (status === "unauthenticated") {
+      setLoading(false);
     }
   }, [status, token]);
 
-  // Generate a key
-  const handleGenerateKey = async () => {
+  // Generate Key action
+  const handleCreateKey = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     if (!token) return;
+
     try {
+      setGenerating(true);
       setError(null);
       const res = await fetch(`${apiBaseUrl}/api/keys`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
         },
+        body: JSON.stringify({ label: keyLabel.trim() || undefined }),
       });
+
       if (res.ok) {
         const data = await res.json();
-        setNewKey(data.key);
-        setShowModal(true);
-        fetchKeys(); // Refresh list
+        setGeneratedKey(data.key);
+        setKeyLabel("");
+        fetchKeys();
+        setToastMessage("API key generated successfully");
       } else {
         setError("Failed to generate API key.");
       }
     } catch (err) {
       console.error(err);
       setError("An error occurred while generating the API key.");
+    } finally {
+      setGenerating(false);
     }
   };
 
-  // Delete a key
+  // Delete key action
   const handleDeleteKey = async (prefix: string) => {
     if (!token) return;
-    if (!confirm(`Are you sure you want to delete key prefix ${prefix}?`)) return;
+    if (!confirm(`Are you sure you want to revoke key ${prefix}••••••••? This action cannot be undone.`)) return;
+
     try {
+      setDeletingPrefix(prefix);
       setError(null);
       const res = await fetch(`${apiBaseUrl}/api/keys/${prefix}`, {
         method: "DELETE",
@@ -92,171 +113,339 @@ export default function ApiKeysPage() {
           Authorization: `Bearer ${token}`,
         },
       });
+
       if (res.ok) {
-        fetchKeys(); // Refresh list
+        setKeys((prev) => prev.filter((k) => k.prefix !== prefix));
+        setToastMessage(`Key ${prefix} revoked successfully`);
       } else {
         setError("Failed to delete API key.");
       }
     } catch (err) {
       console.error(err);
       setError("An error occurred while deleting the API key.");
+    } finally {
+      setDeletingPrefix(null);
     }
   };
 
+  // Copy helper
+  const handleCopy = (text: string, id: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedKey(id);
+    setToastMessage("Copied to clipboard");
+    setTimeout(() => setCopiedKey(null), 2000);
+  };
+
+  const filteredKeys = useMemo(() => {
+    if (!searchQuery.trim()) return keys;
+    const q = searchQuery.toLowerCase();
+    return keys.filter(
+      (k) =>
+        k.prefix.toLowerCase().includes(q) ||
+        (k.label && k.label.toLowerCase().includes(q))
+    );
+  }, [keys, searchQuery]);
+
+  const mockWaypointTitles = ["Production Primary", "Staging Cluster", "Edge Gateway", "CI / Test Suite"];
+
   if (status === "loading" || (status === "authenticated" && loading && keys.length === 0)) {
     return (
-      <div className="flex items-center justify-center min-h-[200px]">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+      <div className="flex items-center justify-center min-h-[300px]">
+        <div className="animate-spin rounded-full h-8 w-8 border-2 border-accent-purple border-t-transparent" />
       </div>
     );
   }
 
   if (status === "unauthenticated") {
     return (
-      <div className="p-6 bg-red-50 text-red-700 rounded-lg shadow">
+      <div className="p-6 bg-status-error/10 border border-status-error/20 text-status-error rounded-2xl">
         Access Denied. Please log in to manage API keys.
       </div>
     );
   }
 
-  const mockTitles = ["Production server", "Staging", "CI pipeline"];
-  const mockLocations = ["Mumbai edge", "Frankfurt edge", "N. Virginia edge"];
-
   return (
     <div className="space-y-6">
-      
-      {/* Title & Generate action */}
-      <div className="flex justify-between items-center select-none">
+      {/* Toast Notification */}
+      <Toast
+        isOpen={Boolean(toastMessage)}
+        message={toastMessage || ""}
+        onClose={() => setToastMessage(null)}
+      />
+
+      {/* Page Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 select-none">
         <div>
-          <h2 className="text-2xl font-bold tracking-tight text-text-primary">Your waypoints</h2>
-          <p className="text-sm text-text-secondary mt-1">Every key is a waypoint — manage authentication</p>
+          <div className="flex items-center gap-3">
+            <h2 className="text-2xl font-bold tracking-tight text-text-primary">
+              Your waypoints
+            </h2>
+            <Badge variant="accent" size="sm">
+              {keys.length} {keys.length === 1 ? "active key" : "active keys"}
+            </Badge>
+          </div>
+          <p className="text-sm text-text-secondary mt-1">
+            Every key is an authenticated waypoint for routing & geocoding endpoints
+          </p>
         </div>
-        <button
-          onClick={handleGenerateKey}
-          className="px-5 py-2.5 bg-accent-purple text-btn-primary-text font-semibold rounded-xl hover:opacity-90 shadow-sm transition-all text-sm flex items-center justify-center"
+
+        <PremiumButton
+          variant="primary"
+          size="md"
+          icon={<Plus className="w-4 h-4" />}
+          onClick={() => {
+            setGeneratedKey(null);
+            setIsCreateModalOpen(true);
+          }}
         >
           + Generate New Key
-        </button>
+        </PremiumButton>
       </div>
 
+      {/* Error alert */}
       {error && (
         <div className="p-4 bg-status-error/10 border border-status-error/20 text-status-error rounded-xl text-sm font-medium">
           {error}
         </div>
       )}
 
-      {/* Keys list and search container */}
-      <div className="bg-bg-surface border border-border-subtle rounded-2xl shadow-glass p-6">
-        
-        {/* Search input for keys */}
-        <div className="relative mb-6 max-w-xl">
-          <input
-            type="text"
-            placeholder="Search keys..."
-            className="w-full rounded-xl bg-bg-base border border-border-default py-2.5 pl-11 pr-4 text-text-primary placeholder-text-muted/65 outline-none text-sm focus:ring-2 focus:ring-accent-purple/20 focus:border-accent-purple transition-all"
-          />
-          <Search className="absolute left-3.5 top-3.5 h-4 w-4 text-text-muted" />
+      {/* Main Keys Container */}
+      <div className="bg-bg-surface border border-border-subtle rounded-2xl shadow-sm overflow-hidden">
+        {/* Search Toolbar */}
+        <div className="p-4 sm:p-5 border-b border-border-subtle flex items-center justify-between gap-4">
+          <div className="relative w-full max-w-sm">
+            <Search className="absolute left-3.5 top-3 h-4 w-4 text-text-muted" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search keys by prefix or name..."
+              className="w-full rounded-xl bg-bg-base border border-border-default py-2 pl-10 pr-4 text-xs sm:text-sm text-text-primary placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-accent-purple/20 focus:border-accent-purple transition-all"
+            />
+          </div>
         </div>
 
+        {/* Empty State */}
         {keys.length === 0 ? (
-          <div className="p-12 text-center text-text-muted select-none">
-            No API keys found. Click the button above to generate your first key.
+          <div className="p-12 text-center select-none space-y-4">
+            <div className="w-12 h-12 rounded-2xl bg-bg-elevated border border-border-subtle flex items-center justify-center mx-auto text-text-muted">
+              <Key className="w-6 h-6" />
+            </div>
+            <div>
+              <h3 className="text-base font-semibold text-text-primary">No API keys yet</h3>
+              <p className="text-xs sm:text-sm text-text-secondary mt-1 max-w-sm mx-auto">
+                Generate your first API key waypoint to authenticate routing and map engine requests.
+              </p>
+            </div>
+            <PremiumButton
+              variant="secondary"
+              size="sm"
+              icon={<Plus className="w-3.5 h-3.5" />}
+              onClick={() => {
+                setGeneratedKey(null);
+                setIsCreateModalOpen(true);
+              }}
+            >
+              Generate First Key
+            </PremiumButton>
+          </div>
+        ) : filteredKeys.length === 0 ? (
+          <div className="p-12 text-center text-text-muted text-sm select-none">
+            No keys matched &ldquo;{searchQuery}&rdquo;
           </div>
         ) : (
-          <div className="flex flex-col gap-4">
-            {keys.map((key, index) => {
-              const title = mockTitles[index % mockTitles.length];
-              const location = mockLocations[index % mockLocations.length];
-              
-              return (
-                <div 
-                  key={key.id} 
-                  className="p-5 bg-bg-base border border-border-subtle rounded-2xl flex flex-col md:flex-row md:items-center justify-between shadow-sm relative pl-6 pr-6 gap-4"
-                >
-                  {/* Left green active indicator stripe */}
-                  <span className="absolute left-0 top-0 bottom-0 w-1 bg-status-success rounded-l-2xl" />
+          /* Sleek Minimalist Table */
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead>
+                <tr className="border-b border-border-subtle text-xs font-semibold uppercase tracking-wider text-text-muted bg-bg-base/50 select-none">
+                  <th className="py-3.5 px-5">Name / Waypoint</th>
+                  <th className="py-3.5 px-5">Key Prefix</th>
+                  <th className="py-3.5 px-5">Created</th>
+                  <th className="py-3.5 px-5">Usage</th>
+                  <th className="py-3.5 px-5">Status</th>
+                  <th className="py-3.5 px-5 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border-subtle/60">
+                {filteredKeys.map((k, index) => {
+                  const title = k.label || mockWaypointTitles[index % mockWaypointTitles.length];
 
-                  {/* Key metadata & Title */}
-                  <div className="flex flex-col gap-1.5 select-none">
-                    <div className="flex items-center gap-2.5 flex-wrap">
-                      <span className="font-bold text-text-primary text-base">{title}</span>
-                      <span className="text-xs font-semibold text-text-secondary bg-bg-elevated px-2.5 py-0.5 rounded-full border border-border-subtle/50">
-                        {location}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2 text-xs text-text-muted">
-                      <span>Created {new Date(key.created_at).toLocaleDateString()}</span>
-                      <span>•</span>
-                      <span>Last ping {key.usage_count > 0 ? `${key.usage_count} min ago` : "never"}</span>
-                    </div>
-                  </div>
-
-                  {/* Key prefix, status and actions */}
-                  <div className="flex items-center gap-4 flex-wrap md:flex-nowrap">
-                    
-                    {/* Key token wrapper */}
-                    <span className="font-mono text-xs bg-bg-elevated px-3 py-1.5 rounded-xl border border-border-subtle text-text-secondary select-all select-none">
-                      {key.prefix}••••••••
-                    </span>
-
-                    {/* Status Badge */}
-                    <span className="text-xs font-bold px-3 py-1 rounded-full bg-status-success/10 text-status-success border border-status-success/20 select-none">
-                      ACTIVE
-                    </span>
-
-                    {/* Delete Action button */}
-                    <button
-                      onClick={() => handleDeleteKey(key.prefix)}
-                      className="text-status-error hover:opacity-80 text-sm font-semibold transition-all select-none pl-2"
+                  return (
+                    <tr
+                      key={k.id}
+                      className="hover:bg-bg-elevated/40 transition-colors group"
                     >
-                      Delete
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
+                      {/* Name / Waypoint */}
+                      <td className="py-4 px-5">
+                        <div className="font-semibold text-text-primary group-hover:text-accent-purple transition-colors">
+                          {title}
+                        </div>
+                        <div className="text-xs text-text-muted mt-0.5">
+                          ID #{k.id}
+                        </div>
+                      </td>
+
+                      {/* Key Prefix Monospace Pill */}
+                      <td className="py-4 px-5">
+                        <div className="inline-flex items-center gap-2 bg-bg-elevated border border-border-subtle rounded-lg px-2.5 py-1 text-xs font-mono text-text-secondary select-all">
+                          <span>{k.prefix}••••••••</span>
+                          <button
+                            onClick={() => handleCopy(`${k.prefix}`, `prefix-${k.id}`)}
+                            title="Copy prefix"
+                            className="text-text-muted hover:text-text-primary transition-colors p-0.5"
+                          >
+                            {copiedKey === `prefix-${k.id}` ? (
+                              <Check className="w-3 h-3 text-status-success" />
+                            ) : (
+                              <Copy className="w-3 h-3" />
+                            )}
+                          </button>
+                        </div>
+                      </td>
+
+                      {/* Created Date */}
+                      <td className="py-4 px-5 text-xs text-text-secondary select-none">
+                        {new Date(k.created_at).toLocaleDateString("en-US", {
+                          month: "short",
+                          day: "numeric",
+                          year: "numeric",
+                        })}
+                      </td>
+
+                      {/* Usage */}
+                      <td className="py-4 px-5 text-xs text-text-secondary select-none">
+                        <span className="font-medium text-text-primary">
+                          {k.usage_count.toLocaleString()}
+                        </span>{" "}
+                        calls
+                      </td>
+
+                      {/* Status */}
+                      <td className="py-4 px-5">
+                        <Badge variant="success" size="sm">
+                          ACTIVE
+                        </Badge>
+                      </td>
+
+                      {/* Actions */}
+                      <td className="py-4 px-5 text-right">
+                        <PremiumButton
+                          variant="danger"
+                          size="sm"
+                          loading={deletingPrefix === k.prefix}
+                          icon={<Trash2 className="w-3.5 h-3.5" />}
+                          onClick={() => handleDeleteKey(k.prefix)}
+                        >
+                          Revoke
+                        </PremiumButton>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         )}
       </div>
 
-      {/* Modal for new key display */}
-      {showModal && newKey && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-bg-surface border border-border-subtle rounded-2xl shadow-xl max-w-lg w-full p-6 space-y-5 animate-in scale-in duration-200">
-            <h3 className="text-xl font-bold tracking-tight text-text-primary">API Key Generated</h3>
-            
-            <div className="p-4 bg-status-warning/10 border border-status-warning/20 text-status-warning rounded-xl text-sm space-y-1.5">
-              <p className="font-bold">Important security warning:</p>
-              <p className="font-medium text-text-secondary">Copy this API key now. For security reasons, you will not be able to see it again.</p>
+      {/* Create / Reveal Key Modal */}
+      <Modal
+        isOpen={isCreateModalOpen}
+        onClose={() => {
+          setIsCreateModalOpen(false);
+          setGeneratedKey(null);
+        }}
+        title={generatedKey ? "API Key Generated" : "Generate New Waypoint Key"}
+        description={
+          generatedKey
+            ? "Your new API key is ready. Copy and store it securely."
+            : "Create an authenticated API key to access Wayline routing and mapping APIs."
+        }
+      >
+        {!generatedKey ? (
+          <form onSubmit={handleCreateKey} className="space-y-4 pt-2">
+            <div>
+              <label className="block text-xs font-semibold uppercase tracking-wider text-text-muted mb-1.5 select-none">
+                Key Label / Purpose (Optional)
+              </label>
+              <input
+                type="text"
+                value={keyLabel}
+                onChange={(e) => setKeyLabel(e.target.value)}
+                placeholder="e.g., Production Backend, Mobile App, CI"
+                className="w-full rounded-xl bg-bg-base border border-border-default py-2.5 px-3.5 text-sm text-text-primary placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-accent-purple/20 focus:border-accent-purple transition-all"
+                autoFocus
+              />
             </div>
 
-            <div className="flex items-center space-x-2 bg-bg-base border border-border-subtle p-3 rounded-xl">
-              <span className="font-mono text-sm break-all select-all flex-1 text-text-primary px-1">{newKey}</span>
-              <button
-                onClick={() => {
-                  navigator.clipboard.writeText(newKey);
-                  alert("Copied to clipboard!");
-                }}
-                className="px-4 py-2 bg-bg-surface border border-border-default hover:bg-bg-elevated text-xs font-bold rounded-lg text-text-primary transition-all select-none"
+            <div className="flex justify-end gap-2.5 pt-2">
+              <PremiumButton
+                variant="ghost"
+                size="md"
+                onClick={() => setIsCreateModalOpen(false)}
               >
-                Copy
-              </button>
+                Cancel
+              </PremiumButton>
+              <PremiumButton
+                type="submit"
+                variant="primary"
+                size="md"
+                loading={generating}
+              >
+                Generate Key
+              </PremiumButton>
+            </div>
+          </form>
+        ) : (
+          <div className="space-y-4 pt-2">
+            {/* Security Warning */}
+            <div className="p-4 bg-status-warning/10 border border-status-warning/20 text-status-warning rounded-xl text-xs sm:text-sm flex items-start gap-3">
+              <ShieldAlert className="w-5 h-5 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="font-bold">Important Security Notice</p>
+                <p className="text-text-secondary mt-0.5">
+                  Save this key in your environment variables now. For security reasons, it will never be displayed again.
+                </p>
+              </div>
+            </div>
+
+            {/* Key Box */}
+            <div className="flex items-center gap-2 bg-bg-base border border-border-default p-2.5 rounded-xl">
+              <span className="font-mono text-xs sm:text-sm break-all select-all flex-1 text-text-primary px-1.5">
+                {generatedKey}
+              </span>
+              <PremiumButton
+                variant="secondary"
+                size="sm"
+                icon={
+                  copiedKey === "full-key" ? (
+                    <Check className="w-3.5 h-3.5 text-status-success" />
+                  ) : (
+                    <Copy className="w-3.5 h-3.5" />
+                  )
+                }
+                onClick={() => handleCopy(generatedKey, "full-key")}
+              >
+                {copiedKey === "full-key" ? "Copied" : "Copy"}
+              </PremiumButton>
             </div>
 
             <div className="flex justify-end pt-2">
-              <button
+              <PremiumButton
+                variant="primary"
+                size="md"
                 onClick={() => {
-                  setShowModal(false);
-                  setNewKey(null);
+                  setIsCreateModalOpen(false);
+                  setGeneratedKey(null);
                 }}
-                className="px-5 py-2.5 bg-accent-purple hover:opacity-90 text-btn-primary-text font-semibold rounded-xl transition-all text-sm select-none"
               >
                 I have saved this key
-              </button>
+              </PremiumButton>
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </Modal>
     </div>
   );
 }
