@@ -154,15 +154,6 @@ func main() {
         <div className="pointer-events-none absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[400px] bg-accent-purple/[0.08] rounded-full blur-3xl" />
 
         <div className="relative mx-auto max-w-5xl px-4 text-center sm:px-6 lg:px-8 space-y-8">
-          {/* Brand Identity Coordinates & Concept Pill */}
-          <div className="inline-flex items-center gap-3 px-4 py-1.5 rounded-full bg-bg-surface border border-border-default shadow-xs text-xs font-mono text-brand-stone mx-auto">
-            <span className="text-text-primary font-semibold">12.9716° N &nbsp; 77.5946° E</span>
-            <span className="text-border-strong">·</span>
-            <span className="tracking-widest uppercase text-text-muted font-sans font-semibold text-[10px]">
-              Places · Paths · Possibilities
-            </span>
-          </div>
-
           {/* Main Headline */}
           <h1 className="text-3xl font-extrabold tracking-tight sm:text-5xl lg:text-6xl text-text-primary max-w-4xl mx-auto leading-[1.12]">
             Spatial infrastructure engineered for{" "}
