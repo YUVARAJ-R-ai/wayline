@@ -247,7 +247,7 @@ func main() {
                   </div>
                   <div className="flex items-center gap-3">
                     <Badge variant="success" size="sm">
-                      ⚡ 12ms Latency
+                      12ms Latency
                     </Badge>
                     <span className="font-mono text-xs text-text-muted">200 OK</span>
                   </div>

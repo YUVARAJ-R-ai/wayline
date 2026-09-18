@@ -155,7 +155,7 @@ export default function WaylineLogo({
           <circle cx="0" cy="0" r="5.5" fill="#F6F4EB" />
         </g>
 
-        {/* 6. Compass Star ✦ */}
+        {/* 6. Compass Star */}
         <g transform="translate(258, 22)">
           <polygon points="0,0 0,-18 3.5,-3" fill="url(#compStarLight)" />
           <polygon points="0,0 0,-18 -3.5,-3" fill="url(#compStarDark)" />

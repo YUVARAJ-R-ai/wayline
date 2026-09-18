@@ -658,7 +658,7 @@ export default function RoutingMap() {
                 onClick={handleSaveApiKey}
                 className="text-[10px] text-accent-purple hover:underline font-semibold"
               >
-                {saveSuccess ? "Saved ✓" : "Save"}
+                {saveSuccess ? "Saved" : "Save"}
               </button>
             </div>
             <input
@@ -818,7 +818,7 @@ export default function RoutingMap() {
                   </div>
                   <div className="pt-2 border-t border-border-subtle flex items-center justify-between text-xs">
                     <span className="font-mono text-[11px] text-accent-purple font-semibold">
-                      ⚡ {selectedLocation.latency}ms
+                      {selectedLocation.latency}ms
                     </span>
                     <button
                       onClick={() => {
@@ -852,7 +852,7 @@ export default function RoutingMap() {
                 </span>
                 {info.latency && (
                   <span className="font-mono text-[11px] text-accent-purple font-semibold">
-                    ⚡ {info.latency}ms
+                    {info.latency}ms
                   </span>
                 )}
               </div>

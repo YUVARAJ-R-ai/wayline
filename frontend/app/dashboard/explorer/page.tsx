@@ -513,14 +513,14 @@ export default function SpatialExplorerPage() {
                   onClick={() => processCSVData(parseCSVText(SAMPLE_CSV_GEOCODED), "chennai-hubs.csv")}
                   className="text-left text-[10px] font-medium p-2 bg-bg-base hover:bg-bg-elevated border border-border-subtle rounded-lg text-text-secondary transition-colors"
                 >
-                  📍 With Geocodes
+                  With Geocodes
                 </button>
                 <button
                   type="button"
                   onClick={() => processCSVData(parseCSVText(SAMPLE_CSV_ADDRESSES), "addresses-unmapped.csv")}
                   className="text-left text-[10px] font-medium p-2 bg-bg-base hover:bg-bg-elevated border border-border-subtle rounded-lg text-text-secondary transition-colors"
                 >
-                  ⚡ Address Batch
+                  Address Batch
                 </button>
               </div>
             </div>
@@ -548,7 +548,7 @@ export default function SpatialExplorerPage() {
                       {geocodingProgress ? `${geocodingProgress.current}/${geocodingProgress.total}` : "Resolving..."}
                     </span>
                   ) : (
-                    "⚡ Batch Geocode All"
+                    "Batch Geocode All"
                   )}
                 </PremiumButton>
               </div>
