@@ -7,6 +7,7 @@ import Link from "next/link";
 import { LayoutGrid, Map, BarChart3, Key, Settings, User } from "lucide-react";
 import { SignOutButton } from "@/components/SignOutButton";
 import { WaylineLogo } from "@/components/ui";
+import { ThemeToggle } from "@/components/ThemeProvider";
 
 export default function DashboardLayout({
   children,
@@ -131,15 +132,6 @@ export default function DashboardLayout({
             </Link>
           </nav>
         </div>
-
-        {/* Bottom Avatar Indicator -> Links to Profile Settings */}
-        <Link
-          href="/dashboard/settings"
-          title="Account Settings"
-          className="w-9 h-9 rounded-full bg-accent-purple-muted border border-accent-purple/20 flex items-center justify-center text-xs font-bold text-accent-purple hover:border-accent-purple transition-all"
-        >
-          {userInitials || "AD"}
-        </Link>
       </aside>
 
       {/* Main Content Area */}
@@ -152,7 +144,10 @@ export default function DashboardLayout({
             <h1 className="text-sm font-bold tracking-tight text-text-primary">{sectionTitle}</h1>
           </div>
           
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3.5">
+            {/* Theme Toggle (Dark / Light) */}
+            <ThemeToggle />
+
             {/* Clickable User Profile Widget -> Links to Settings */}
             <Link
               href="/dashboard/settings"

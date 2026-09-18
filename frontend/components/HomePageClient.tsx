@@ -31,6 +31,7 @@ import {
   Badge,
   Toast,
 } from "@/components/ui";
+import { ThemeToggle } from "@/components/ThemeProvider";
 
 export default function HomePageClient() {
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -131,8 +132,9 @@ func main() {
             </a>
           </nav>
 
-          {/* Action Buttons: Log In & Sign Up */}
+          {/* Action Buttons: Theme Toggle, Log In & Sign Up */}
           <div className="flex items-center gap-3">
+            <ThemeToggle />
             <Link
               href="/login?mode=login"
               className="text-xs font-semibold text-text-secondary hover:text-text-primary px-3 py-1.5 rounded-lg hover:bg-bg-elevated transition-colors"

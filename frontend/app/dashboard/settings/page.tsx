@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
+import { useTheme } from "@/components/ThemeProvider";
 import {
   User,
   Mail,
@@ -16,11 +17,15 @@ import {
   Key,
   Globe,
   Lock,
+  Sun,
+  Moon,
+  Palette,
 } from "lucide-react";
 import { Badge, PremiumButton, Toast } from "@/components/ui";
 
 export default function SettingsProfilePage() {
   const { data: session } = useSession();
+  const { theme, setTheme } = useTheme();
   const [activeTab, setActiveTab] = useState<"profile" | "routing" | "security">("profile");
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -98,22 +103,19 @@ export default function SettingsProfilePage() {
       />
 
       {/* Page Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 select-none pb-4 border-b border-border-subtle">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 select-none">
         <div>
-          <h2 className="text-xl font-bold tracking-tight text-text-primary">
-            Account & Preferences
+          <h2 className="text-2xl font-bold tracking-tight text-text-primary">
+            Settings & Profile
           </h2>
-          <p className="text-xs text-text-secondary mt-0.5">
-            Manage your personal profile, map settings, and security credentials
+          <p className="text-xs sm:text-sm text-text-secondary mt-1">
+            Manage your account credentials, themes, routing preferences, and security policies.
           </p>
         </div>
-        <Badge variant="success" size="sm">
-          Active Plan: Pro Enterprise
-        </Badge>
       </div>
 
-      {/* Tabs Switcher */}
-      <div className="flex items-center gap-2 bg-bg-surface p-1 rounded-2xl border border-border-default text-xs font-semibold select-none max-w-md">
+      {/* Navigation Tabs */}
+      <div className="flex items-center bg-bg-surface p-1 rounded-2xl border border-border-default text-xs font-semibold select-none max-w-md">
         <button
           onClick={() => setActiveTab("profile")}
           className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl transition-colors ${
@@ -123,7 +125,7 @@ export default function SettingsProfilePage() {
           }`}
         >
           <User className="w-3.5 h-3.5 text-accent-purple" />
-          <span>Profile</span>
+          <span>Profile & Theme</span>
         </button>
         <button
           onClick={() => setActiveTab("routing")}
@@ -149,7 +151,7 @@ export default function SettingsProfilePage() {
         </button>
       </div>
 
-      {/* TAB 1: PROFILE INFO */}
+      {/* TAB 1: PROFILE INFO & THEME SELECTION */}
       {activeTab === "profile" && (
         <form onSubmit={handleSaveProfile} className="space-y-6">
           {/* Avatar Banner Card */}
@@ -166,6 +168,75 @@ export default function SettingsProfilePage() {
                 </span>
                 <span className="text-xs text-text-muted">•</span>
                 <span className="text-xs text-text-muted">{organization}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Theme & Appearance Card */}
+          <div className="p-6 bg-bg-surface border border-border-default rounded-3xl shadow-sm space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-sm font-bold text-text-primary select-none">
+                <Palette className="w-4 h-4 text-accent-purple" />
+                <span>Appearance & Color Theme</span>
+              </div>
+              <Badge variant="accent" size="sm">2 Themes Available</Badge>
+            </div>
+
+            <p className="text-xs text-text-secondary">
+              Choose your interface color scheme. Both modes are built with the official Wayline earthy brand palette.
+            </p>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+              {/* Dark Theme Option */}
+              <div
+                onClick={() => {
+                  setTheme("dark");
+                  setToastMessage("Dark theme activated");
+                }}
+                className={`p-4 rounded-2xl border-2 cursor-pointer transition-all flex items-start gap-3.5 select-none ${
+                  theme === "dark"
+                    ? "border-accent-purple bg-[#141A16] text-[#F6F4EB] shadow-md ring-2 ring-accent-purple/20"
+                    : "border-border-default bg-[#0B0F0D]/60 hover:border-border-strong text-text-secondary"
+                }`}
+              >
+                <div className="p-2.5 rounded-xl bg-[#1F2A1F] border border-[#2A382C] text-[#F6F4EB]">
+                  <Moon className="w-5 h-5 text-[#8B9B89]" />
+                </div>
+                <div className="flex-1 space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-[#F6F4EB]">Dark Theme</span>
+                    {theme === "dark" && <Check className="w-4 h-4 text-[#436352]" />}
+                  </div>
+                  <p className="text-[11px] text-[#8B9B89] leading-relaxed">
+                    Obsidian Charcoal background with deep forest olive surfaces and sage accents.
+                  </p>
+                </div>
+              </div>
+
+              {/* Light Theme Option */}
+              <div
+                onClick={() => {
+                  setTheme("light");
+                  setToastMessage("Light theme activated");
+                }}
+                className={`p-4 rounded-2xl border-2 cursor-pointer transition-all flex items-start gap-3.5 select-none ${
+                  theme === "light"
+                    ? "border-accent-purple bg-[#FFFFFF] text-[#0B0F0D] shadow-md ring-2 ring-accent-purple/20"
+                    : "border-border-default bg-[#F6F4EB]/60 hover:border-border-strong text-text-secondary"
+                }`}
+              >
+                <div className="p-2.5 rounded-xl bg-[#ECE8DC] border border-[#DAD7C7] text-[#0B0F0D]">
+                  <Sun className="w-5 h-5 text-[#C7944B]" />
+                </div>
+                <div className="flex-1 space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-[#0B0F0D]">Light Theme</span>
+                    {theme === "light" && <Check className="w-4 h-4 text-[#436352]" />}
+                  </div>
+                  <p className="text-[11px] text-[#5E6D60] leading-relaxed">
+                    Warm Ivory canvas with crisp white cards, sand borders, and dark charcoal typography.
+                  </p>
+                </div>
               </div>
             </div>
           </div>
