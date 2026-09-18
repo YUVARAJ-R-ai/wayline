@@ -27,39 +27,39 @@ export default function InteractiveDotGrid() {
 
   return (
     <div className="pointer-events-none fixed inset-0 z-0 overflow-hidden select-none">
-      {/* 1. Ambient Dot Grid (Visible in both Dark & Light modes) */}
+      {/* 1. Ultra-Subtle Ambient Micro-Dot Grid */}
       <div
-        className="absolute inset-0 [background-size:24px_24px] opacity-90 transition-opacity duration-300"
+        className="absolute inset-0 [background-size:24px_24px] opacity-75 transition-opacity duration-300"
         style={{
           backgroundImage:
-            "radial-gradient(var(--dot-base-color, rgba(139, 155, 137, 0.28)) 1.25px, transparent 1.25px)",
+            "radial-gradient(var(--dot-base-color, rgba(139, 155, 137, 0.09)) 1px, transparent 1px)",
         }}
       />
 
-      {/* 2. Cursor-Sensitive Spotlight Layer (Intensifies dots near the mouse pointer) */}
+      {/* 2. Soft Cursor-Sensitive Interactive Highlight */}
       {mousePos && isVisible && (
         <div
-          className="absolute inset-0 [background-size:24px_24px] transition-opacity duration-150"
+          className="absolute inset-0 [background-size:24px_24px] transition-opacity duration-200"
           style={{
             backgroundImage:
-              "radial-gradient(var(--dot-active-color, #F6F4EB) 1.8px, transparent 1.8px)",
-            maskImage: `radial-gradient(420px circle at ${mousePos.x}px ${mousePos.y}px, rgba(0,0,0,1) 0%, rgba(0,0,0,0.45) 45%, transparent 100%)`,
-            WebkitMaskImage: `radial-gradient(420px circle at ${mousePos.x}px ${mousePos.y}px, rgba(0,0,0,1) 0%, rgba(0,0,0,0.45) 45%, transparent 100%)`,
+              "radial-gradient(var(--dot-active-color, rgba(139, 155, 137, 0.26)) 1.2px, transparent 1.2px)",
+            maskImage: `radial-gradient(320px circle at ${mousePos.x}px ${mousePos.y}px, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.2) 50%, transparent 100%)`,
+            WebkitMaskImage: `radial-gradient(320px circle at ${mousePos.x}px ${mousePos.y}px, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.2) 50%, transparent 100%)`,
           }}
         />
       )}
 
-      {/* 3. Subtle Atmospheric Cursor Halo Glow */}
+      {/* 3. Subtle Ambient Light Halo around Cursor */}
       {mousePos && isVisible && (
         <div
-          className="absolute pointer-events-none -translate-x-1/2 -translate-y-1/2 rounded-full blur-3xl transition-opacity duration-200"
+          className="absolute pointer-events-none -translate-x-1/2 -translate-y-1/2 rounded-full blur-3xl transition-opacity duration-300"
           style={{
             left: `${mousePos.x}px`,
             top: `${mousePos.y}px`,
-            width: "380px",
-            height: "380px",
+            width: "300px",
+            height: "300px",
             background:
-              "radial-gradient(circle, var(--cursor-glow-color, rgba(67, 99, 82, 0.2)) 0%, transparent 70%)",
+              "radial-gradient(circle, var(--cursor-glow-color, rgba(67, 99, 82, 0.08)) 0%, transparent 70%)",
           }}
         />
       )}
