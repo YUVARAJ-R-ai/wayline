@@ -12,3 +12,6 @@ export type { ModalProps } from "./Modal";
 
 export { default as Toast } from "./Toast";
 export type { ToastProps } from "./Toast";
+
+export { default as WaylineLogo } from "./WaylineLogo";
+export type { WaylineLogoProps } from "./WaylineLogo";

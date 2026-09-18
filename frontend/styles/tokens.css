@@ -76,37 +76,37 @@
 
 /* Dark Theme Colors */
 [data-theme='dark'] {
-  --bg-base: #121310;         /* Deep olive-charcoal black */
-  --bg-surface: #1c1e1a;      /* Dark olive-charcoal surface */
-  --bg-elevated: #262823;     /* Warm dark slate/olive card surface */
-  --bg-overlay: rgba(18, 19, 16, 0.75);
+  --bg-base: #090a0f;         /* Deep obsidian background */
+  --bg-surface: #11141b;      /* Dark slate-charcoal surface */
+  --bg-elevated: #181c26;     /* Elevated panel/card surface */
+  --bg-overlay: rgba(9, 10, 15, 0.85);
 
-  --border-subtle: #292b26;   /* Subtle dark olive-charcoal border */
-  --border-default: #3d4039;  /* Default panel border */
-  --border-strong: #54574e;   /* Strong separator border */
+  --border-subtle: #1f2430;   /* Subtle hairline border */
+  --border-default: #2d3446;  /* Default component border */
+  --border-strong: #404b63;   /* Strong separator/focus border */
 
-  --text-primary: #eae9e5;    /* Warm off-white primary text */
-  --text-secondary: #9ea298;  /* Muted sage/gray secondary text */
-  --text-muted: #777a72;      /* Muted text */
-  --text-disabled: #4a4d46;   /* Disabled text */
+  --text-primary: #f3f4f6;    /* Crisp off-white primary text */
+  --text-secondary: #9ca3af;  /* Muted silver-gray secondary text */
+  --text-muted: #6b7280;      /* Muted placeholder text */
+  --text-disabled: #4b5563;   /* Disabled text */
 
-  --accent-purple: #7ebd97;   /* Soft Sage / Olive-Green (Brand Accent) */
-  --accent-blue: #9cccad;     /* Light sage secondary */
-  --accent-purple-muted: rgba(126, 189, 151, 0.12);
+  --accent-purple: #10b981;   /* Vivid Emerald/Teal (from Wayline logo) */
+  --accent-blue: #06b6d4;     /* Cyan secondary */
+  --accent-purple-muted: rgba(16, 185, 129, 0.12);
 
-  --status-success: #10b981;  /* Muted emerald success */
-  --status-warning: #f59e0b;  /* Muted amber warning */
-  --status-error: #ef4444;    /* Muted red error */
+  --status-success: #10b981;  /* Emerald success */
+  --status-warning: #f59e0b;  /* Amber warning */
+  --status-error: #ef4444;    /* Red error */
 
   /* Button Components overrides */
-  --btn-signin-bg: transparent;
-  --btn-signin-text: var(--accent-purple);
-  --btn-signin-border: var(--accent-purple);
-  --btn-signin-hover: rgba(126, 189, 151, 0.08);
-  --btn-primary-text: #121310;
+  --btn-signin-bg: #10b981;
+  --btn-signin-text: #090a0f;
+  --btn-signin-border: transparent;
+  --btn-signin-hover: #059669;
+  --btn-primary-text: #090a0f;
 
   --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.5);
-  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -1px rgba(0, 0, 0, 0.2);
-  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.4), 0 4px 6px -2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.4), 0 2px 4px -1px rgba(0, 0, 0, 0.25);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.5), 0 4px 6px -2px rgba(0, 0, 0, 0.35);
   --shadow-glass: 0 8px 32px 0 rgba(0, 0, 0, 0.5);
 }
