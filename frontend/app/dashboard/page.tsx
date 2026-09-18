@@ -76,18 +76,8 @@ export default function DashboardPage() {
   }, []);
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex justify-between items-center select-none">
-        <div>
-          <h2 className="text-2xl font-bold tracking-tight text-text-primary">
-            Overview
-          </h2>
-          <p className="text-sm text-text-secondary mt-1">
-            Real-time routing engine and interactive mapping
-          </p>
-        </div>
-      </div>
+    <div className="space-y-6 animate-in fade-in duration-150">
+
 
       {/* Responsive Stats Row */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
