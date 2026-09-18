@@ -27,9 +27,6 @@ export function recordKeyUsage(keyOrPrefix?: string | null) {
   const target = devKeysStore.find((k) => k.prefix === prefix);
   if (target) {
     target.usage_count += 1;
-  } else if (devKeysStore.length > 0) {
-    // If prefix wasn't specific, attribute to primary key
-    devKeysStore[0].usage_count += 1;
   }
 }
 
