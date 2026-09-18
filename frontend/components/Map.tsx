@@ -35,6 +35,7 @@ interface MapProps {
   apiKey?: string | null;
   customFeatures?: CustomSpatialFeature[];
   customPolygons?: CustomSpatialPolygon[];
+  checkpoints?: Array<{ lat: number; lng: number; label?: string }>;
 }
 
 const DEFAULT_CENTER: [number, number] = [13.0843, 80.2705];
@@ -181,7 +182,8 @@ export default function Map({
   showStreets,
   apiKey,
   customFeatures = [],
-  customPolygons = []
+  customPolygons = [],
+  checkpoints = []
 }: MapProps) {
   const markerRef = useRef<L.Marker>(null);
   const fromMarkerRef = useRef<L.Marker>(null);
@@ -250,6 +252,16 @@ export default function Map({
           </Popup>
         </Marker>
       )}
+
+      {/* Intermediate Checkpoint Markers */}
+      {checkpoints.map((cp, idx) => (
+        <Marker key={`cp-${idx}-${cp.lat}-${cp.lng}`} position={[cp.lat, cp.lng]} icon={ochreIcon}>
+          <Popup>
+            <span className="font-bold text-status-warning">Stop #{idx + 1}</span>
+            {cp.label && <div className="text-xs text-text-secondary mt-1">{cp.label}</div>}
+          </Popup>
+        </Marker>
+      ))}
 
       {/* To marker (Red) */}
       {toPosition && (

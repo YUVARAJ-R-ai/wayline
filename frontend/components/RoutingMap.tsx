@@ -1,40 +1,40 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import dynamic from "next/dynamic";
 import {
-  Search,
-  MapPin,
-  Key,
-  Trash2,
-  Loader2,
   Navigation,
-  Info,
-  Layers,
-  Code2,
-  Copy,
-  Check,
-  X,
-  Zap,
-  ArrowUpDown,
-  Compass,
-  ArrowRight,
-  Crosshair,
-  Download,
-  History,
+  MapPin,
   Car,
   Footprints,
   Bike,
+  Bus,
+  Search,
+  Crosshair,
+  ArrowUpDown,
+  History,
+  Info,
+  Layers,
+  Trash2,
+  Copy,
+  Download,
+  Key,
+  ArrowRight,
+  Loader2,
+  Code2,
+  Plus,
+  X,
+  Sparkles,
 } from "lucide-react";
-import { Badge, PremiumButton, Toast } from "@/components/ui";
+import { PremiumButton, Badge, Toast } from "@/components/ui";
 
-// Dynamic import for Leaflet map component (prevents SSR window errors)
+// Dynamically import Leaflet Map to prevent SSR window issues
 const Map = dynamic(() => import("@/components/Map"), {
   ssr: false,
   loading: () => (
-    <div className="h-full w-full bg-bg-elevated flex flex-col items-center justify-center text-text-muted gap-3 rounded-2xl select-none min-h-[450px]">
+    <div className="h-full w-full bg-bg-surface flex flex-col items-center justify-center text-text-muted gap-3 rounded-2xl select-none min-h-[500px]">
       <Loader2 className="h-8 w-8 animate-spin text-accent-purple" />
-      <span className="text-xs font-mono tracking-wide">Loading Map Engine...</span>
+      <span className="text-xs font-mono tracking-wide">Initializing Spatial Engine...</span>
     </div>
   ),
 });
@@ -60,6 +60,29 @@ function calculateDistance(coords: [number, number][]): number {
   return total;
 }
 
+export type RoutingProfile = "car" | "foot" | "bike" | "bus";
+
+// Dynamic Speed & Duration Calculator
+function getDurationForProfile(distanceKm: number, profile: RoutingProfile): number {
+  if (profile === "foot") {
+    return Math.max(1, Math.round((distanceKm / 4.8) * 60)); // ~4.8 km/h walking
+  }
+  if (profile === "bike") {
+    return Math.max(1, Math.round((distanceKm / 15) * 60)); // ~15 km/h cycling
+  }
+  if (profile === "bus") {
+    return Math.max(2, Math.round((distanceKm / 22) * 60) + 4); // ~22 km/h bus transit + dwell
+  }
+  return Math.max(1, Math.round((distanceKm / 42) * 60)); // ~42 km/h driving
+}
+
+interface CheckpointItem {
+  id: string;
+  query: string;
+  coord: [number, number] | null;
+  address: string | null;
+}
+
 interface RecentRouteItem {
   id: string;
   fromName: string;
@@ -72,19 +95,21 @@ interface RecentRouteItem {
 export default function RoutingMap() {
   // Mode: "route" vs "geocode"
   const [activeTab, setActiveTab] = useState<"route" | "geocode">("route");
-  const [routingProfile, setRoutingProfile] = useState<"car" | "foot" | "bike">("car");
+  const [routingProfile, setRoutingProfile] = useState<RoutingProfile>("car");
   const [showApiInspector, setShowApiInspector] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [copiedResponse, setCopiedResponse] = useState(false);
   const [locatingUser, setLocatingUser] = useState(false);
 
-  // Routing State
+  // Routing Origin, Destination, and Checkpoints
   const [fromQuery, setFromQuery] = useState("");
   const [toQuery, setToQuery] = useState("");
   const [fromCoord, setFromCoord] = useState<[number, number] | null>(null);
   const [toCoord, setToCoord] = useState<[number, number] | null>(null);
   const [fromAddress, setFromAddress] = useState<string | null>(null);
   const [toAddress, setToAddress] = useState<string | null>(null);
+  const [checkpoints, setCheckpoints] = useState<CheckpointItem[]>([]);
+
   const [routePoints, setRoutePoints] = useState<Array<[number, number]>>([]);
   const [info, setInfo] = useState<{ distance: number; duration: number; latency?: number } | null>(null);
   const [loading, setLoading] = useState(false);
@@ -162,9 +187,11 @@ export default function RoutingMap() {
             r.toCoord[1] === item.toCoord[1]
           )
       );
-      const updated = [newItem, ...filtered].slice(0, 4);
-      if (typeof window !== "undefined") {
+      const updated = [newItem, ...filtered].slice(0, 6);
+      try {
         window.localStorage.setItem("wayline_recent_routes", JSON.stringify(updated));
+      } catch {
+        // ignore
       }
       return updated;
     });
@@ -172,78 +199,145 @@ export default function RoutingMap() {
 
   const handleClearHistory = () => {
     setRecentRoutes([]);
-    if (typeof window !== "undefined") {
+    try {
       window.localStorage.removeItem("wayline_recent_routes");
+    } catch {
+      // ignore
     }
-    setToastMessage("Recent history cleared");
+    setToastMessage("Cleared recent route history");
   };
 
   const handleSaveApiKey = () => {
     if (typeof window !== "undefined") {
       window.localStorage.setItem("wayline_api_key", apiKey.trim());
       setSaveSuccess(true);
-      setToastMessage("API Key saved");
+      setToastMessage("API key saved for live requests");
       setTimeout(() => setSaveSuccess(false), 2000);
     }
   };
 
-  const handleClear = () => {
-    setFromQuery("");
-    setToQuery("");
-    setFromCoord(null);
-    setToCoord(null);
-    setFromAddress(null);
-    setToAddress(null);
-    setRoutePoints([]);
-    setInfo(null);
-    setError(null);
-    setSelectedLocation(null);
-  };
-
-  const handleSwapDirections = () => {
-    const tempCoord = fromCoord;
-    const tempAddress = fromAddress;
-    const tempQuery = fromQuery;
-
-    setFromCoord(toCoord);
-    setFromAddress(toAddress);
-    setFromQuery(toQuery);
-
-    setToCoord(tempCoord);
-    setToAddress(tempAddress);
-    setToQuery(tempQuery);
-
-    if (toCoord && tempCoord) {
-      fetchRouteDirectly(toCoord, tempCoord);
+  // Instant Switch Profile & Recalculate Time on Click
+  const handleProfileChange = (newProfile: RoutingProfile) => {
+    setRoutingProfile(newProfile);
+    if (info && info.distance > 0) {
+      const newDuration = getDurationForProfile(info.distance, newProfile);
+      setInfo((prev) => (prev ? { ...prev, duration: newDuration } : null));
+      const profileName =
+        newProfile === "car"
+          ? "Driving"
+          : newProfile === "foot"
+          ? "Walking"
+          : newProfile === "bike"
+          ? "Bicycle"
+          : "Transit / Bus";
+      setToastMessage(`${profileName} time: ~${newDuration} min`);
     }
   };
 
-  // Locate User GPS
+  // Checkpoints management
+  const handleAddCheckpoint = () => {
+    if (checkpoints.length >= 5) {
+      setToastMessage("Maximum 5 intermediate checkpoints reached.");
+      return;
+    }
+    const newCheckpoint: CheckpointItem = {
+      id: `cp-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+      query: "",
+      coord: null,
+      address: null,
+    };
+    setCheckpoints((prev) => [...prev, newCheckpoint]);
+  };
+
+  const handleRemoveCheckpoint = (id: string) => {
+    setCheckpoints((prev) => prev.filter((c) => c.id !== id));
+  };
+
+  const handleCheckpointChange = (id: string, value: string) => {
+    setCheckpoints((prev) =>
+      prev.map((c) => (c.id === id ? { ...c, query: value, coord: null, address: null } : c))
+    );
+  };
+
+  // Map Click Handler: smart assignment (Origin -> Checkpoints -> Destination)
+  const handleMapClick = (latlng: { lat: number; lng: number }) => {
+    const coords: [number, number] = [latlng.lat, latlng.lng];
+    const formatted = `${latlng.lat.toFixed(5)}, ${latlng.lng.toFixed(5)}`;
+
+    if (!fromCoord) {
+      setFromCoord(coords);
+      setFromAddress(formatted);
+      setFromQuery(formatted);
+      setToastMessage("Origin set from map click");
+    } else {
+      // Find first empty checkpoint
+      const emptyCpIndex = checkpoints.findIndex((c) => !c.coord);
+      if (emptyCpIndex !== -1) {
+        setCheckpoints((prev) =>
+          prev.map((c, i) =>
+            i === emptyCpIndex ? { ...c, coord: coords, address: formatted, query: formatted } : c
+          )
+        );
+        setToastMessage(`Stop #${emptyCpIndex + 1} set from map click`);
+      } else if (!toCoord) {
+        setToCoord(coords);
+        setToAddress(formatted);
+        setToQuery(formatted);
+        setToastMessage("Destination set from map click");
+      } else {
+        // Replace destination
+        setToCoord(coords);
+        setToAddress(formatted);
+        setToQuery(formatted);
+        setToastMessage("Destination updated from map click");
+      }
+    }
+  };
+
+  // Swap Origin and Destination
+  const handleSwapDirections = () => {
+    const tempQ = fromQuery;
+    const tempC = fromCoord;
+    const tempA = fromAddress;
+
+    setFromQuery(toQuery);
+    setFromCoord(toCoord);
+    setFromAddress(toAddress);
+
+    setToQuery(tempQ);
+    setToCoord(tempC);
+    setToAddress(tempA);
+
+    if (fromCoord && toCoord) {
+      fetchRouteMulti([toCoord, ...checkpoints.map((c) => c.coord).filter(Boolean) as [number, number][], fromCoord]);
+    }
+  };
+
+  // Geolocation
   const handleLocateMe = () => {
     if (!navigator.geolocation) {
-      setToastMessage("Geolocation is not supported");
+      setToastMessage("Geolocation is not supported by your browser.");
       return;
     }
 
     setLocatingUser(true);
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
-        const userCoord: [number, number] = [pos.coords.latitude, pos.coords.longitude];
-        setFromCoord(userCoord);
-        setMapCenter(userCoord);
-        setFromQuery(`${userCoord[0].toFixed(4)}, ${userCoord[1].toFixed(4)}`);
-        setFromAddress("My Current Location");
+        const coords: [number, number] = [pos.coords.latitude, pos.coords.longitude];
+        setFromCoord(coords);
+        setMapCenter(coords);
         setLocatingUser(false);
-        setActiveTab("route");
-        setToastMessage("Set current location as start point");
+
+        const latLngStr = `${coords[0].toFixed(5)}, ${coords[1].toFixed(5)}`;
+        setFromQuery(latLngStr);
+        setFromAddress(latLngStr);
+        setToastMessage("Current location detected as origin");
 
         try {
-          const res = await fetch(
-            `${apiBaseUrl}/api/reverse-geocode?lat=${userCoord[0]}&lng=${userCoord[1]}`
-          );
+          const res = await fetch(`/api/geocode?q=${coords[0]},${coords[1]}`);
           if (res.ok) {
             const data = await res.json();
-            if (data.address) {
+            if (data && data.address) {
               setFromAddress(data.address);
               setFromQuery(data.address);
             }
@@ -277,6 +371,7 @@ export default function RoutingMap() {
             distanceKm: info?.distance,
             durationMin: info?.duration,
             profile: routingProfile,
+            checkpoints: checkpoints.map((c) => c.address || c.query),
             engine: "Wayline OSRM Graph",
             createdAt: new Date().toISOString(),
           },
@@ -312,8 +407,9 @@ export default function RoutingMap() {
     setToastMessage(`Copied ${routePoints.length} waypoints`);
   };
 
-  // Helper to fetch routing directly with coordinates
-  const fetchRouteDirectly = async (start: [number, number], end: [number, number]) => {
+  // Multi-waypoint routing executor
+  const fetchRouteMulti = async (points: Array<[number, number]>) => {
+    if (points.length < 2) return;
     setLoading(true);
     setError(null);
 
@@ -324,63 +420,71 @@ export default function RoutingMap() {
 
     const startPerf = performance.now();
     try {
-      const url = `${apiBaseUrl}/api/route?from=${start[1]},${start[0]}&to=${end[1]},${end[0]}`;
-      const routeRes = await fetch(url, { headers });
-      const latency = Math.round(performance.now() - startPerf);
+      let combinedPolyline: Array<[number, number]> = [];
+      let totalDistanceKm = 0;
+      let lastResp: any = null;
+      let lastStatus = 200;
 
-      if (!routeRes.ok) {
-        throw new Error("Could not calculate a route between these coordinates.");
+      // Calculate each leg between sequential stops
+      for (let i = 0; i < points.length - 1; i++) {
+        const start = points[i];
+        const end = points[i + 1];
+        const url = `${apiBaseUrl}/api/route?from=${start[1]},${start[0]}&to=${end[1]},${end[0]}`;
+        const routeRes = await fetch(url, { headers });
+        lastStatus = routeRes.status;
+
+        if (!routeRes.ok) {
+          throw new Error(`Could not calculate route leg #${i + 1}.`);
+        }
+
+        const responseData = await routeRes.json();
+        lastResp = responseData;
+
+        let legCoords: Array<[number, number]> = [];
+        if (responseData && responseData.routes && responseData.routes[0]) {
+          const routeObj = responseData.routes[0];
+          if (routeObj.geometry && routeObj.geometry.coordinates) {
+            legCoords = routeObj.geometry.coordinates.map((c: [number, number]) => [c[1], c[0]]);
+          }
+          if (typeof routeObj.distance === "number") {
+            totalDistanceKm += routeObj.distance / 1000;
+          }
+        } else if (responseData && responseData.coordinates) {
+          legCoords = responseData.coordinates.map((c: [number, number]) => [c[1], c[0]]);
+          if (typeof responseData.distance === "number") {
+            totalDistanceKm += responseData.distance > 1000 ? responseData.distance / 1000 : responseData.distance;
+          }
+        }
+
+        if (legCoords.length > 0) {
+          combinedPolyline = combinedPolyline.concat(legCoords);
+        }
       }
 
-      const responseData = await routeRes.json();
+      const latency = Math.round(performance.now() - startPerf);
       setLastApiCall({
-        endpoint: `GET ${url}`,
-        status: routeRes.status,
+        endpoint: `GET /api/route (${points.length - 1} legs)`,
+        status: lastStatus,
         latencyMs: latency,
-        response: responseData,
+        response: lastResp,
       });
 
-      let leafletCoords: Array<[number, number]> = [];
-      let distanceKm = 0;
-      let durationMin = 0;
-      let gotStatsFromBackend = false;
+      if (combinedPolyline.length > 0) {
+        setRoutePoints(combinedPolyline);
+        if (totalDistanceKm === 0) {
+          totalDistanceKm = calculateDistance(combinedPolyline);
+        }
+        const durationMin = getDurationForProfile(totalDistanceKm, routingProfile);
 
-      if (responseData && responseData.routes && responseData.routes[0]) {
-        const routeObj = responseData.routes[0];
-        const geometryObj = routeObj.geometry;
-        if (geometryObj && geometryObj.coordinates) {
-          leafletCoords = geometryObj.coordinates.map((c: [number, number]) => [c[1], c[0]]);
-        }
-        if (typeof routeObj.distance === "number" && typeof routeObj.duration === "number") {
-          distanceKm = routeObj.distance / 1000;
-          durationMin = Math.round(routeObj.duration / 60);
-          gotStatsFromBackend = true;
-        }
-      } else if (responseData && responseData.coordinates) {
-        leafletCoords = responseData.coordinates.map((c: [number, number]) => [c[1], c[0]]);
-        if (typeof responseData.distance === "number" && typeof responseData.duration === "number") {
-          distanceKm = responseData.distance > 1000 ? responseData.distance / 1000 : responseData.distance;
-          durationMin = responseData.duration > 100 ? Math.round(responseData.duration / 60) : Math.round(responseData.duration);
-          gotStatsFromBackend = true;
-        }
-      }
-
-      if (leafletCoords.length > 0) {
-        setRoutePoints(leafletCoords);
-        if (!gotStatsFromBackend) {
-          distanceKm = calculateDistance(leafletCoords);
-          const speedMultiplier = routingProfile === "foot" ? 5 : routingProfile === "bike" ? 15 : 45;
-          durationMin = Math.max(1, Math.round((distanceKm / speedMultiplier) * 60));
-        }
-        setInfo({ distance: distanceKm, duration: durationMin, latency });
+        setInfo({ distance: totalDistanceKm, duration: durationMin, latency });
         setToastMessage(`Route calculated in ${latency}ms`);
 
         // Save to Recent History
         saveToHistory({
-          fromName: fromAddress || `${start[0].toFixed(4)}, ${start[1].toFixed(4)}`,
-          toName: toAddress || `${end[0].toFixed(4)}, ${end[1].toFixed(4)}`,
-          fromCoord: start,
-          toCoord: end,
+          fromName: fromAddress || `${points[0][0].toFixed(4)}, ${points[0][1].toFixed(4)}`,
+          toName: toAddress || `${points[points.length - 1][0].toFixed(4)}, ${points[points.length - 1][1].toFixed(4)}`,
+          fromCoord: points[0],
+          toCoord: points[points.length - 1],
         });
       } else {
         throw new Error("Route geometry not found in response.");
@@ -393,7 +497,7 @@ export default function RoutingMap() {
     }
   };
 
-  // Execute geocoding + routing from form inputs
+  // Resolve all inputs (Origin + Checkpoints + Destination) and calculate route
   const handleGetRoute = async () => {
     if (!fromQuery.trim() || !toQuery.trim()) {
       setError("Please enter both starting and destination addresses.");
@@ -414,9 +518,10 @@ export default function RoutingMap() {
     }
 
     try {
+      // 1. Resolve Origin
       if (!activeFrom || fromQuery !== activeFromAddress) {
         const res = await fetch(`${apiBaseUrl}/api/geocode?q=${encodeURIComponent(fromQuery)}`, { headers });
-        if (!res.ok) throw new Error(`Failed to resolve start address`);
+        if (!res.ok) throw new Error("Failed to resolve start address");
         const data = await res.json();
         if (data && typeof data.lat === "number" && typeof data.lng === "number") {
           activeFrom = [data.lat, data.lng];
@@ -427,9 +532,31 @@ export default function RoutingMap() {
         }
       }
 
+      // 2. Resolve intermediate checkpoints
+      const resolvedCheckpoints: CheckpointItem[] = [];
+      for (const cp of checkpoints) {
+        if (cp.query.trim()) {
+          let cpCoord = cp.coord;
+          let cpAddress = cp.address;
+          if (!cpCoord || cp.query !== cpAddress) {
+            const res = await fetch(`${apiBaseUrl}/api/geocode?q=${encodeURIComponent(cp.query)}`, { headers });
+            if (res.ok) {
+              const data = await res.json();
+              if (data && typeof data.lat === "number" && typeof data.lng === "number") {
+                cpCoord = [data.lat, data.lng];
+                cpAddress = data.address || cp.query;
+              }
+            }
+          }
+          resolvedCheckpoints.push({ ...cp, coord: cpCoord, address: cpAddress });
+        }
+      }
+      setCheckpoints(resolvedCheckpoints);
+
+      // 3. Resolve Destination
       if (!activeTo || toQuery !== activeToAddress) {
         const res = await fetch(`${apiBaseUrl}/api/geocode?q=${encodeURIComponent(toQuery)}`, { headers });
-        if (!res.ok) throw new Error(`Failed to resolve destination address`);
+        if (!res.ok) throw new Error("Failed to resolve destination address");
         const data = await res.json();
         if (data && typeof data.lat === "number" && typeof data.lng === "number") {
           activeTo = [data.lat, data.lng];
@@ -441,30 +568,37 @@ export default function RoutingMap() {
       }
 
       if (activeFrom && activeTo) {
-        await fetchRouteDirectly(activeFrom, activeTo);
+        const validCpCoords = resolvedCheckpoints
+          .map((c) => c.coord)
+          .filter(Boolean) as [number, number][];
+        await fetchRouteMulti([activeFrom, ...validCpCoords, activeTo]);
       }
     } catch (err: any) {
       console.error(err);
       setError(err.message || "An error occurred while resolving locations.");
-    } finally {
       setLoading(false);
     }
   };
 
-  // Execute Geocoding Search
-  const handleSearchLocation = async (queryToSearch?: string) => {
-    const q = queryToSearch || searchQuery;
+  // Geocode Search Single Query
+  const handleSearchLocation = async (queryText?: string) => {
+    const q = queryText || searchQuery;
     if (!q.trim()) return;
 
     setSearchLoading(true);
-    const start = performance.now();
+    const startPerf = performance.now();
+
     const headers: Record<string, string> = {};
-    if (apiKey.trim()) headers["x-api-key"] = apiKey.trim();
+    if (apiKey.trim()) {
+      headers["x-api-key"] = apiKey.trim();
+    }
 
     try {
       const url = `${apiBaseUrl}/api/geocode?q=${encodeURIComponent(q.trim())}`;
       const res = await fetch(url, { headers });
-      const latency = Math.round(performance.now() - start);
+      const latency = Math.round(performance.now() - startPerf);
+
+      if (!res.ok) throw new Error("Location not found");
       const data = await res.json();
 
       setLastApiCall({
@@ -474,118 +608,61 @@ export default function RoutingMap() {
         response: data,
       });
 
-      if (res.ok && data && typeof data.lat === "number" && typeof data.lng === "number") {
-        const loc = {
+      if (data && typeof data.lat === "number" && typeof data.lng === "number") {
+        const coords: [number, number] = [data.lat, data.lng];
+        setSelectedLocation({
           lat: data.lat,
           lng: data.lng,
           address: data.address || q,
           latency,
-        };
-        setSelectedLocation(loc);
-        setMapCenter([data.lat, data.lng]);
-        setToastMessage(`Resolved: ${data.address || q}`);
+        });
+        setMapCenter(coords);
+        setToastMessage(`Located: ${data.address || q}`);
       } else {
-        setToastMessage("Address not found.");
+        throw new Error("No coordinates returned.");
       }
-    } catch (err) {
-      console.error(err);
-      setToastMessage("Geocode request failed.");
+    } catch (err: any) {
+      setToastMessage(err.message || "Search error");
     } finally {
       setSearchLoading(false);
     }
   };
 
-  // Map Click state machine: Click 1 -> Start, Click 2 -> End, Click 3 -> Clear
-  const handleMapClick = async (latlng: { lat: number; lng: number }) => {
-    const coord: [number, number] = [latlng.lat, latlng.lng];
-    const headers: Record<string, string> = {};
-    if (apiKey.trim()) headers["x-api-key"] = apiKey.trim();
-
-    if (!fromCoord) {
-      setFromCoord(coord);
-      setFromQuery(`${latlng.lat.toFixed(4)}, ${latlng.lng.toFixed(4)}`);
-      setFromAddress("Resolving address...");
-      setActiveTab("route");
-
-      try {
-        const res = await fetch(
-          `${apiBaseUrl}/api/reverse-geocode?lat=${latlng.lat}&lng=${latlng.lng}`,
-          { headers }
-        );
-        if (res.ok) {
-          const data = await res.json();
-          setFromAddress(data.address);
-          setFromQuery(data.address);
-        } else {
-          setFromAddress(`Location (${latlng.lat.toFixed(4)}, ${latlng.lng.toFixed(4)})`);
-        }
-      } catch {
-        setFromAddress(`Location (${latlng.lat.toFixed(4)}, ${latlng.lng.toFixed(4)})`);
-      }
-    } else if (!toCoord) {
-      setToCoord(coord);
-      setToQuery(`${latlng.lat.toFixed(4)}, ${latlng.lng.toFixed(4)}`);
-      setToAddress("Resolving address...");
-
-      let resolvedTo = `Location (${latlng.lat.toFixed(4)}, ${latlng.lng.toFixed(4)})`;
-      try {
-        const res = await fetch(
-          `${apiBaseUrl}/api/reverse-geocode?lat=${latlng.lat}&lng=${latlng.lng}`,
-          { headers }
-        );
-        if (res.ok) {
-          const data = await res.json();
-          resolvedTo = data.address;
-          setToAddress(resolvedTo);
-          setToQuery(resolvedTo);
-        } else {
-          setToAddress(resolvedTo);
-        }
-      } catch {
-        setToAddress(resolvedTo);
-      }
-
-      await fetchRouteDirectly(fromCoord, coord);
-    } else {
-      handleClear();
-    }
-  };
-
-  const copyTelemetry = () => {
-    navigator.clipboard.writeText(JSON.stringify(lastApiCall.response, null, 2));
-    setCopiedResponse(true);
-    setToastMessage("JSON response copied");
-    setTimeout(() => setCopiedResponse(false), 2000);
+  const handleClear = () => {
+    setFromCoord(null);
+    setToCoord(null);
+    setFromAddress(null);
+    setToAddress(null);
+    setFromQuery("");
+    setToQuery("");
+    setCheckpoints([]);
+    setRoutePoints([]);
+    setInfo(null);
+    setError(null);
+    setSelectedLocation(null);
+    setToastMessage("Routing canvas reset");
   };
 
   return (
-    <div className="relative grid grid-cols-1 lg:grid-cols-12 gap-5 h-[calc(100vh-13rem)] min-h-[600px]">
+    <div className="flex flex-col gap-4 select-none animate-in fade-in duration-150">
       <Toast
         isOpen={Boolean(toastMessage)}
         message={toastMessage || ""}
         onClose={() => setToastMessage(null)}
       />
 
-      {/* --- LEFT SIDEBAR CONTROL PANEL (4 Cols on LG) --- */}
-      <div className="lg:col-span-4 bg-bg-surface border border-border-default rounded-3xl shadow-glass p-5 flex flex-col justify-between overflow-y-auto gap-4 select-none">
-        <div className="space-y-4">
-          {/* Header & Primary Mode Switcher */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 text-accent-purple font-bold text-sm">
-                <Compass className="h-4 w-4" />
-                <span className="text-text-primary">Spatial Console</span>
-              </div>
-              <Badge variant="neutral" size="sm">
-                OSRM Live
-              </Badge>
-            </div>
-
-            {/* Mode Switcher Pills: Directions vs Geocode */}
-            <div className="grid grid-cols-2 gap-1 bg-bg-base p-1 rounded-xl border border-border-subtle text-xs font-semibold">
+      {/* Main Sandbox Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        
+        {/* Left Side Control Panel (1 Col) */}
+        <div className="bg-bg-surface border border-border-default rounded-2xl p-4 shadow-sm flex flex-col justify-between space-y-4">
+          
+          <div className="space-y-4">
+            {/* Tab Mode Bar: Route vs Geocode */}
+            <div className="flex items-center bg-bg-base p-1 rounded-xl border border-border-subtle text-xs font-semibold">
               <button
                 onClick={() => setActiveTab("route")}
-                className={`flex items-center justify-center gap-1.5 py-1.5 rounded-lg transition-colors ${
+                className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg transition-colors ${
                   activeTab === "route"
                     ? "bg-bg-elevated text-text-primary border border-border-subtle shadow-sm"
                     : "text-text-muted hover:text-text-secondary"
@@ -596,7 +673,7 @@ export default function RoutingMap() {
               </button>
               <button
                 onClick={() => setActiveTab("geocode")}
-                className={`flex items-center justify-center gap-1.5 py-1.5 rounded-lg transition-colors ${
+                className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg transition-colors ${
                   activeTab === "geocode"
                     ? "bg-bg-elevated text-text-primary border border-border-subtle shadow-sm"
                     : "text-text-muted hover:text-text-secondary"
@@ -607,41 +684,60 @@ export default function RoutingMap() {
               </button>
             </div>
 
-            {/* Clean, Non-Overflowing 3-Grid Profile Switcher */}
+            {/* Profile Switcher: Driving, Walking, Bicycle, Transit/Bus */}
             {activeTab === "route" && (
-              <div className="grid grid-cols-3 gap-1 bg-bg-base/70 p-1 rounded-xl border border-border-subtle text-xs">
+              <div className="grid grid-cols-4 gap-1 bg-bg-base/70 p-1 rounded-xl border border-border-subtle text-xs">
                 <button
-                  onClick={() => setRoutingProfile("car")}
-                  className={`flex items-center justify-center gap-1.5 py-1 rounded-lg transition-colors ${
+                  type="button"
+                  onClick={() => handleProfileChange("car")}
+                  className={`flex items-center justify-center gap-1 py-1.5 rounded-lg transition-colors ${
                     routingProfile === "car"
                       ? "bg-bg-elevated text-accent-purple font-semibold border border-border-subtle shadow-sm"
                       : "text-text-muted hover:text-text-secondary"
                   }`}
+                  title="Driving profile (~42 km/h)"
                 >
-                  <Car className="w-3.5 h-3.5" />
-                  <span>Driving</span>
+                  <Car className="w-3.5 h-3.5 flex-shrink-0" />
+                  <span className="text-[11px]">Driving</span>
                 </button>
                 <button
-                  onClick={() => setRoutingProfile("foot")}
-                  className={`flex items-center justify-center gap-1.5 py-1 rounded-lg transition-colors ${
+                  type="button"
+                  onClick={() => handleProfileChange("foot")}
+                  className={`flex items-center justify-center gap-1 py-1.5 rounded-lg transition-colors ${
                     routingProfile === "foot"
                       ? "bg-bg-elevated text-accent-purple font-semibold border border-border-subtle shadow-sm"
                       : "text-text-muted hover:text-text-secondary"
                   }`}
+                  title="Walking profile (~4.8 km/h)"
                 >
-                  <Footprints className="w-3.5 h-3.5" />
-                  <span>Walking</span>
+                  <Footprints className="w-3.5 h-3.5 flex-shrink-0" />
+                  <span className="text-[11px]">Walking</span>
                 </button>
                 <button
-                  onClick={() => setRoutingProfile("bike")}
-                  className={`flex items-center justify-center gap-1.5 py-1 rounded-lg transition-colors ${
+                  type="button"
+                  onClick={() => handleProfileChange("bike")}
+                  className={`flex items-center justify-center gap-1 py-1.5 rounded-lg transition-colors ${
                     routingProfile === "bike"
                       ? "bg-bg-elevated text-accent-purple font-semibold border border-border-subtle shadow-sm"
                       : "text-text-muted hover:text-text-secondary"
                   }`}
+                  title="Bicycle profile (~15 km/h)"
                 >
-                  <Bike className="w-3.5 h-3.5" />
-                  <span>Bicycle</span>
+                  <Bike className="w-3.5 h-3.5 flex-shrink-0" />
+                  <span className="text-[11px]">Bicycle</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleProfileChange("bus")}
+                  className={`flex items-center justify-center gap-1 py-1.5 rounded-lg transition-colors ${
+                    routingProfile === "bus"
+                      ? "bg-bg-elevated text-accent-purple font-semibold border border-border-subtle shadow-sm"
+                      : "text-text-muted hover:text-text-secondary"
+                  }`}
+                  title="Bus & Transit profile (~22 km/h + dwell)"
+                >
+                  <Bus className="w-3.5 h-3.5 flex-shrink-0" />
+                  <span className="text-[11px]">Bus</span>
                 </button>
               </div>
             )}
@@ -670,11 +766,12 @@ export default function RoutingMap() {
             />
           </div>
 
-          {/* TAB A: DIRECTIONS & ROUTING */}
+          {/* TAB A: DIRECTIONS & ROUTING WITH MULTI-STOP CHECKPOINTS */}
           {activeTab === "route" ? (
             <div className="space-y-3">
               <div className="space-y-2 relative">
-                {/* From Input */}
+                
+                {/* 1. Origin Input */}
                 <div className="space-y-1">
                   <div className="flex items-center justify-between text-[11px]">
                     <label className="font-semibold text-text-secondary flex items-center gap-1.5">
@@ -697,25 +794,68 @@ export default function RoutingMap() {
                     value={fromQuery}
                     onChange={(e) => setFromQuery(e.target.value)}
                     onKeyDown={(e) => e.key === "Enter" && handleGetRoute()}
-                    className="w-full rounded-xl bg-bg-base border border-border-default py-2 px-3 text-xs text-text-primary placeholder-text-muted outline-none focus:border-accent-purple transition-colors"
+                    className="w-full rounded-xl bg-bg-base border border-border-default py-2 px-3 text-xs text-text-primary placeholder:text-text-muted outline-none focus:border-accent-purple transition-colors"
                   />
                 </div>
 
-                {/* Destination Input */}
-                <div className="space-y-1">
+                {/* 2. Dynamic Intermediate Checkpoints */}
+                {checkpoints.map((cp, idx) => (
+                  <div key={cp.id} className="space-y-1 animate-in fade-in slide-in-from-top-1 duration-150">
+                    <div className="flex items-center justify-between text-[11px]">
+                      <label className="font-semibold text-status-warning flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-status-warning inline-block" />
+                        <span>Stop #{idx + 1}</span>
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveCheckpoint(cp.id)}
+                        className="text-[10px] text-text-muted hover:text-status-error flex items-center gap-0.5"
+                        title="Remove checkpoint"
+                      >
+                        <X className="w-3 h-3" />
+                        <span>Remove</span>
+                      </button>
+                    </div>
+                    <input
+                      type="text"
+                      placeholder={`Enter Stop #${idx + 1} address or location...`}
+                      value={cp.query}
+                      onChange={(e) => handleCheckpointChange(cp.id, e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && handleGetRoute()}
+                      className="w-full rounded-xl bg-bg-base border border-status-warning/40 py-2 px-3 text-xs text-text-primary placeholder:text-text-muted outline-none focus:border-status-warning transition-colors"
+                    />
+                  </div>
+                ))}
+
+                {/* Add Checkpoint Button */}
+                <div className="flex items-center justify-between pt-1">
+                  <button
+                    type="button"
+                    onClick={handleAddCheckpoint}
+                    className="inline-flex items-center gap-1 text-[11px] font-semibold text-accent-purple hover:underline"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Add Checkpoint ({checkpoints.length}/5)</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleSwapDirections}
+                    title="Swap start and destination"
+                    className="text-[10px] text-text-muted hover:text-text-primary flex items-center gap-1"
+                  >
+                    <ArrowUpDown className="w-3 h-3" />
+                    <span>Swap Ends</span>
+                  </button>
+                </div>
+
+                {/* 3. Destination Input */}
+                <div className="space-y-1 pt-1">
                   <div className="flex items-center justify-between text-[11px]">
                     <label className="font-semibold text-text-secondary flex items-center gap-1.5">
                       <span className="w-2 h-2 rounded-full bg-status-error inline-block" />
                       <span>Destination</span>
                     </label>
-                    <button
-                      onClick={handleSwapDirections}
-                      title="Swap start and destination"
-                      className="text-[10px] text-text-muted hover:text-text-primary flex items-center gap-1"
-                    >
-                      <ArrowUpDown className="w-3 h-3" />
-                      <span>Swap</span>
-                    </button>
                   </div>
                   <input
                     type="text"
@@ -723,7 +863,7 @@ export default function RoutingMap() {
                     value={toQuery}
                     onChange={(e) => setToQuery(e.target.value)}
                     onKeyDown={(e) => e.key === "Enter" && handleGetRoute()}
-                    className="w-full rounded-xl bg-bg-base border border-border-default py-2 px-3 text-xs text-text-primary placeholder-text-muted outline-none focus:border-accent-purple transition-colors"
+                    className="w-full rounded-xl bg-bg-base border border-border-default py-2 px-3 text-xs text-text-primary placeholder:text-text-muted outline-none focus:border-accent-purple transition-colors"
                   />
                 </div>
               </div>
@@ -753,7 +893,8 @@ export default function RoutingMap() {
                           setToAddress(r.toName);
                           setFromQuery(r.fromName);
                           setToQuery(r.toName);
-                          fetchRouteDirectly(r.fromCoord, r.toCoord);
+                          setCheckpoints([]);
+                          fetchRouteMulti([r.fromCoord, r.toCoord]);
                         }}
                         className="w-full text-left px-2.5 py-1.5 rounded-lg bg-bg-base hover:bg-bg-elevated border border-border-subtle text-[11px] text-text-secondary hover:text-text-primary transition-colors flex items-center justify-between"
                       >
@@ -790,7 +931,7 @@ export default function RoutingMap() {
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     placeholder="Search city, address, or POI..."
-                    className="w-full rounded-xl bg-bg-base border border-border-default py-2 pl-9 pr-16 text-xs text-text-primary placeholder-text-muted outline-none focus:border-accent-purple transition-colors"
+                    className="w-full rounded-xl bg-bg-base border border-border-default py-2 pl-9 pr-16 text-xs text-text-primary placeholder:text-text-muted outline-none focus:border-accent-purple transition-colors"
                   />
                   <button
                     type="submit"
@@ -840,30 +981,84 @@ export default function RoutingMap() {
           )}
         </div>
 
-        {/* Bottom Actions & Results */}
-        <div className="space-y-3 pt-3 border-t border-border-subtle">
-          {/* Results Summary */}
+        {/* Right Map Canvas & Live Inspector (2 Cols) */}
+        <div className="lg:col-span-2 space-y-4">
+          
+          {/* Map Container */}
+          <div className="h-[520px] w-full rounded-2xl overflow-hidden border border-border-default shadow-md relative">
+            <Map
+              center={mapCenter}
+              markerPosition={selectedLocation ? [selectedLocation.lat, selectedLocation.lng] : null}
+              markerAddress={selectedLocation?.address}
+              fromPosition={fromCoord}
+              toPosition={toCoord}
+              fromAddress={fromAddress}
+              toAddress={toAddress}
+              checkpoints={checkpoints
+                .filter((c) => c.coord !== null)
+                .map((c) => ({ lat: c.coord![0], lng: c.coord![1], label: c.address || c.query }))}
+              polyline={routePoints}
+              onMapClick={handleMapClick}
+              showStreets={showStreets}
+              apiKey={apiKey}
+            />
+
+            {/* Floating Quick Action & Status Controls */}
+            <div className="absolute top-3 right-3 z-[400] flex items-center gap-2">
+              <button
+                onClick={() => setShowApiInspector(!showApiInspector)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-semibold backdrop-blur-md transition-all shadow-sm ${
+                  showApiInspector
+                    ? "bg-accent-purple text-btn-primary-text border-accent-purple"
+                    : "bg-bg-surface/90 border-border-default text-text-secondary hover:text-text-primary"
+                }`}
+              >
+                <Code2 className="w-3.5 h-3.5" />
+                <span>Telemetry</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Results Summary Bar */}
           {info && activeTab === "route" && (
-            <div className="p-3 bg-bg-base border border-border-subtle rounded-xl space-y-2">
+            <div className="p-4 bg-bg-surface border border-border-default rounded-2xl shadow-sm space-y-3">
               <div className="flex items-center justify-between text-xs font-bold text-text-secondary">
                 <span className="flex items-center gap-1.5">
                   <Info className="h-3.5 w-3.5 text-accent-purple" />
-                  Route Metrics
+                  Route Telemetry Summary
                 </span>
-                {info.latency && (
-                  <span className="font-mono text-[11px] text-accent-purple font-semibold">
-                    {info.latency}ms
-                  </span>
-                )}
-              </div>
-              <div className="grid grid-cols-2 gap-2 text-center">
-                <div className="bg-bg-elevated p-2 rounded-lg border border-border-subtle/50">
-                  <div className="text-[10px] text-text-muted font-bold uppercase tracking-wider">Distance</div>
-                  <div className="text-xs font-bold text-text-primary mt-0.5">{info.distance.toFixed(1)} km</div>
+                <div className="flex items-center gap-2">
+                  <Badge variant="accent" size="sm">
+                    {routingProfile === "car"
+                      ? "Driving"
+                      : routingProfile === "foot"
+                      ? "Walking"
+                      : routingProfile === "bike"
+                      ? "Bicycle"
+                      : "Transit / Bus"}
+                  </Badge>
+                  {info.latency && (
+                    <span className="font-mono text-[11px] text-accent-purple font-semibold">
+                      {info.latency}ms
+                    </span>
+                  )}
                 </div>
-                <div className="bg-bg-elevated p-2 rounded-lg border border-border-subtle/50">
-                  <div className="text-[10px] text-text-muted font-bold uppercase tracking-wider">Est. Time</div>
-                  <div className="text-xs font-bold text-text-primary mt-0.5">~{info.duration} min</div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-3 text-center font-mono">
+                <div className="bg-bg-base p-2.5 rounded-xl border border-border-subtle">
+                  <div className="text-[10px] text-text-muted uppercase font-bold tracking-wider">Distance</div>
+                  <div className="text-sm font-bold text-text-primary mt-0.5">{info.distance.toFixed(1)} km</div>
+                </div>
+                <div className="bg-bg-base p-2.5 rounded-xl border border-border-subtle">
+                  <div className="text-[10px] text-text-muted uppercase font-bold tracking-wider">Est. Time</div>
+                  <div className="text-sm font-bold text-accent-purple mt-0.5">~{info.duration} min</div>
+                </div>
+                <div className="bg-bg-base p-2.5 rounded-xl border border-border-subtle">
+                  <div className="text-[10px] text-text-muted uppercase font-bold tracking-wider">Waypoints</div>
+                  <div className="text-sm font-bold text-text-primary mt-0.5">
+                    {checkpoints.filter((c) => c.coord !== null).length + 2} Stops
+                  </div>
                 </div>
               </div>
 
@@ -874,148 +1069,100 @@ export default function RoutingMap() {
                   className="flex items-center gap-1 text-text-muted hover:text-text-primary transition-colors font-semibold"
                   title="Export GeoJSON LineString"
                 >
-                  <Download className="w-3 h-3" />
-                  <span>GeoJSON</span>
+                  <Download className="w-3 h-3 text-accent-purple" />
+                  <span>Export GeoJSON</span>
                 </button>
                 <button
                   onClick={handleCopyCoordinates}
                   className="flex items-center gap-1 text-text-muted hover:text-text-primary transition-colors font-semibold"
                   title="Copy waypoints array"
                 >
-                  <Copy className="w-3 h-3" />
+                  <Copy className="w-3 h-3 text-accent-purple" />
                   <span>Copy Coords ({routePoints.length})</span>
                 </button>
               </div>
             </div>
           )}
 
-          {/* Action buttons */}
+          {/* Action buttons & Street Grid toggle */}
           {activeTab === "route" && (
-            <div className="flex gap-2">
-              <PremiumButton
-                variant="primary"
-                size="sm"
-                loading={loading}
-                onClick={handleGetRoute}
-                className="flex-1"
-                icon={<Navigation className="w-3.5 h-3.5" />}
-              >
-                Calculate Route
-              </PremiumButton>
-              <button
-                onClick={handleClear}
-                disabled={loading || (!fromCoord && !toCoord && !fromQuery && !toQuery)}
-                className="bg-bg-elevated hover:bg-bg-base text-text-primary border border-border-default disabled:opacity-50 px-3 rounded-xl text-xs font-bold transition-colors"
-                title="Clear all"
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-              </button>
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex gap-2 flex-1">
+                <PremiumButton
+                  variant="primary"
+                  size="sm"
+                  loading={loading}
+                  onClick={handleGetRoute}
+                  className="flex-1 justify-center py-2"
+                  icon={<Navigation className="w-3.5 h-3.5" />}
+                >
+                  Calculate Route
+                </PremiumButton>
+                <button
+                  onClick={handleClear}
+                  disabled={loading || (!fromCoord && !toCoord && !fromQuery && !toQuery)}
+                  className="bg-bg-surface hover:bg-bg-elevated text-text-primary border border-border-default disabled:opacity-50 px-3.5 rounded-xl text-xs font-bold transition-colors shadow-sm"
+                  title="Clear all"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              </div>
+
+              {/* Street Overlay Toggle */}
+              <div className="flex items-center gap-2 text-xs text-text-secondary bg-bg-surface border border-border-default px-3 py-1.5 rounded-xl shadow-sm">
+                <Layers className="w-3.5 h-3.5 text-accent-purple" />
+                <span>Streets</span>
+                <button
+                  onClick={() => setShowStreets(!showStreets)}
+                  className={`px-2 py-0.5 rounded-md text-[10px] font-semibold border transition-colors ${
+                    showStreets
+                      ? "bg-accent-purple text-btn-primary-text border-transparent"
+                      : "bg-bg-elevated text-text-muted border-border-subtle hover:text-text-primary"
+                  }`}
+                >
+                  {showStreets ? "ON" : "OFF"}
+                </button>
+              </div>
             </div>
           )}
 
-          {/* Street Overlay Toggle */}
-          <div className="flex items-center justify-between text-xs text-text-secondary pt-1">
-            <span className="flex items-center gap-1.5">
-              <Layers className="w-3.5 h-3.5 text-text-muted" />
-              <span>Street Grid Overlay</span>
-            </span>
-            <button
-              onClick={() => setShowStreets(!showStreets)}
-              className={`px-2 py-0.5 rounded-md text-[11px] font-semibold border transition-colors ${
-                showStreets
-                  ? "bg-accent-purple text-btn-primary-text border-transparent"
-                  : "bg-bg-elevated text-text-muted border-border-subtle hover:text-text-primary"
-              }`}
-            >
-              {showStreets ? "ON" : "OFF"}
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* --- RIGHT MAP DISPLAY CANVAS (8 Cols on LG) --- */}
-      <div className="lg:col-span-8 bg-bg-surface border border-border-default rounded-3xl shadow-glass overflow-hidden h-full relative">
-        <Map
-          polyline={activeTab === "route" ? routePoints : []}
-          onMapClick={handleMapClick}
-          fromPosition={activeTab === "route" ? fromCoord : null}
-          toPosition={activeTab === "route" ? toCoord : null}
-          fromAddress={fromAddress}
-          toAddress={toAddress}
-          center={
-            activeTab === "geocode" && selectedLocation
-              ? [selectedLocation.lat, selectedLocation.lng]
-              : fromCoord || mapCenter
-          }
-          markerPosition={
-            activeTab === "geocode" && selectedLocation
-              ? [selectedLocation.lat, selectedLocation.lng]
-              : null
-          }
-          markerAddress={selectedLocation?.address}
-          showStreets={showStreets}
-          apiKey={apiKey}
-        />
-
-        {/* Floating Bottom API Inspector Button */}
-        <div className="absolute bottom-4 left-4 z-20">
-          <button
-            onClick={() => setShowApiInspector(!showApiInspector)}
-            className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-mono font-semibold border shadow-lg backdrop-blur-md transition-all ${
-              showApiInspector
-                ? "bg-accent-purple text-btn-primary-text border-accent-purple"
-                : "bg-bg-surface/90 text-text-secondary hover:text-text-primary border-border-default hover:bg-bg-elevated"
-            }`}
-          >
-            <Code2 className="w-3.5 h-3.5" />
-            <span>API Telemetry</span>
-            <span className="text-[10px] px-1.5 py-0.2 rounded bg-black/20 text-current font-bold">
-              {lastApiCall.latencyMs}ms
-            </span>
-          </button>
-        </div>
-
-        {/* API Inspector Drawer Modal */}
-        {showApiInspector && (
-          <div className="absolute bottom-16 left-4 right-4 sm:right-auto sm:w-[480px] z-30 bg-bg-surface border border-border-default rounded-2xl shadow-2xl p-4 space-y-3 backdrop-blur-md animate-in slide-in-from-bottom-2 duration-150">
-            <div className="flex items-center justify-between select-none">
-              <div className="flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-accent-purple animate-pulse" />
-                <span className="text-xs font-mono font-bold text-text-primary line-clamp-1">
-                  {lastApiCall.endpoint}
-                </span>
+          {/* Collapsible Telemetry Inspector Drawer */}
+          {showApiInspector && (
+            <div className="p-4 bg-bg-surface border border-border-default rounded-2xl shadow-sm space-y-3 font-mono text-xs">
+              <div className="flex items-center justify-between pb-2 border-b border-border-subtle">
+                <div className="flex items-center gap-2">
+                  <Badge variant="neutral" size="sm">
+                    {lastApiCall.status} OK
+                  </Badge>
+                  <span className="text-[11px] text-text-primary truncate max-w-[280px]">
+                    {lastApiCall.endpoint}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] text-accent-purple font-semibold">
+                    {lastApiCall.latencyMs}ms
+                  </span>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(JSON.stringify(lastApiCall.response, null, 2));
+                      setCopiedResponse(true);
+                      setTimeout(() => setCopiedResponse(false), 2000);
+                    }}
+                    className="p-1 rounded-md hover:bg-bg-elevated text-text-muted hover:text-text-primary transition-colors"
+                    title="Copy response JSON"
+                  >
+                    {copiedResponse ? <Check className="w-3.5 h-3.5 text-accent-purple" /> : <Copy className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
               </div>
-              <div className="flex items-center gap-1.5">
-                <button
-                  onClick={copyTelemetry}
-                  title="Copy JSON response"
-                  className="p-1 text-text-muted hover:text-text-primary rounded"
-                >
-                  {copiedResponse ? (
-                    <Check className="w-3.5 h-3.5 text-accent-purple" />
-                  ) : (
-                    <Copy className="w-3.5 h-3.5" />
-                  )}
-                </button>
-                <button
-                  onClick={() => setShowApiInspector(false)}
-                  className="p-1 text-text-muted hover:text-text-primary rounded"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            </div>
 
-            <div className="p-3 bg-bg-base rounded-xl font-mono text-[11px] text-accent-purple overflow-x-auto max-h-48 border border-border-subtle select-all">
-              <pre>{JSON.stringify(lastApiCall.response, null, 2)}</pre>
+              <pre className="p-3 bg-bg-base rounded-xl text-[11px] text-text-secondary overflow-x-auto max-h-48 border border-border-subtle">
+                {JSON.stringify(lastApiCall.response, null, 2)}
+              </pre>
             </div>
+          )}
 
-            <div className="flex items-center justify-between text-[11px] text-text-muted font-mono pt-1">
-              <span>Status: {lastApiCall.status} OK</span>
-              <span>Latency: {lastApiCall.latencyMs} ms</span>
-            </div>
-          </div>
-        )}
+        </div>
       </div>
     </div>
   );
