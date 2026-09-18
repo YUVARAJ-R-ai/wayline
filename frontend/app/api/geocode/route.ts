@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { recordKeyUsage } from "../keys/route";
 
 const MOCK_LOCATIONS: Record<string, { lat: number; lng: number; address: string }> = {
   london: { lat: 51.5074, lng: -0.1278, address: "London, United Kingdom" },
@@ -17,6 +18,7 @@ export async function GET(req: NextRequest) {
 
   const backendUrl = process.env.BACKEND_URL || "http://localhost:3000";
   const apiKey = req.headers.get("x-api-key");
+  recordKeyUsage(apiKey);
 
   if (backendUrl && !backendUrl.includes("localhost:3000")) {
     try {

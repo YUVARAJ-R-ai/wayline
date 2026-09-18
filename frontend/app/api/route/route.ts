@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { recordKeyUsage } from "../keys/route";
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
@@ -14,6 +15,7 @@ export async function GET(req: NextRequest) {
 
   const backendUrl = process.env.BACKEND_URL || "http://localhost:3000";
   const apiKey = req.headers.get("x-api-key");
+  recordKeyUsage(apiKey);
 
   // 1. Try backend proxy if available and not circular
   if (backendUrl && !backendUrl.includes("localhost:3000")) {

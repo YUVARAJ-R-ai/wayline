@@ -198,7 +198,7 @@ export default function ApiKeysPage() {
             setIsCreateModalOpen(true);
           }}
         >
-          + Generate New Key
+          Generate New Key
         </PremiumButton>
       </div>
 

@@ -21,6 +21,18 @@ let devKeysStore: Array<{
   },
 ];
 
+export function recordKeyUsage(keyOrPrefix?: string | null) {
+  if (!keyOrPrefix) return;
+  const prefix = keyOrPrefix.substring(0, 8);
+  const target = devKeysStore.find((k) => k.prefix === prefix);
+  if (target) {
+    target.usage_count += 1;
+  } else if (devKeysStore.length > 0) {
+    // If prefix wasn't specific, attribute to primary key
+    devKeysStore[0].usage_count += 1;
+  }
+}
+
 export async function GET(req: NextRequest) {
   const backendUrl = process.env.BACKEND_URL || "http://localhost:3000";
   const authHeader = req.headers.get("authorization");
