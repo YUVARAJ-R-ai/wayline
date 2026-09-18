@@ -76,8 +76,24 @@ export default function DashboardPage() {
   }, []);
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-150">
-
+    <div className="space-y-6 animate-in fade-in duration-150 select-none">
+      {/* Page Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-2.5">
+            <h1 className="text-2xl font-bold tracking-tight text-text-primary">
+              Overview & Routing Canvas
+            </h1>
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-accent-purple/15 text-accent-purple border border-accent-purple/20">
+              <span className="w-1.5 h-1.5 rounded-full bg-status-success animate-pulse" />
+              GCC Network Active
+            </span>
+          </div>
+          <p className="text-xs text-text-muted mt-1">
+            Real-time geospatial routing sandbox, telemetry metrics, and API gateway monitor.
+          </p>
+        </div>
+      </div>
 
       {/* Responsive Stats Row */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

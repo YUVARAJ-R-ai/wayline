@@ -277,10 +277,9 @@ export default function SpatialExplorerPage() {
     }
   };
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const [isDragging, setIsDragging] = useState(false);
 
+  const processFile = (file: File) => {
     const reader = new FileReader();
     reader.onload = (event) => {
       const content = event.target?.result as string;
@@ -292,6 +291,44 @@ export default function SpatialExplorerPage() {
       }
     };
     reader.readAsText(file);
+  };
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    processFile(file);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
+
+  const handleDragEnter = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!isDragging) setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) {
+      processFile(file);
+    }
   };
 
   // Batch Geocoding of unmapped addresses via /api/geocode
@@ -414,7 +451,26 @@ export default function SpatialExplorerPage() {
   };
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-150">
+    <div
+      onDragEnter={handleDragEnter}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+      className="space-y-6 animate-in fade-in duration-150 relative"
+    >
+      {/* Full-Screen Drag & Drop Overlay for Files */}
+      {isDragging && (
+        <div className="fixed inset-0 z-[999] bg-bg-base/85 backdrop-blur-md border-4 border-dashed border-accent-purple flex flex-col items-center justify-center pointer-events-none animate-in fade-in duration-150 shadow-2xl">
+          <div className="p-8 rounded-3xl bg-bg-surface border border-border-default shadow-xl flex flex-col items-center text-center max-w-md mx-4">
+            <FileSpreadsheet className="w-16 h-16 text-accent-purple mb-4 animate-bounce" />
+            <h3 className="text-lg font-bold text-text-primary">Drop Spatial Dataset Here</h3>
+            <p className="text-xs text-text-muted mt-1.5 leading-relaxed">
+              Drop any <span className="font-mono text-accent-purple font-semibold">.csv</span>, <span className="font-mono text-accent-purple font-semibold">.tsv</span>, or <span className="font-mono text-accent-purple font-semibold">.geojson</span> file to auto-parse coordinates and batch geocode addresses.
+            </p>
+          </div>
+        </div>
+      )}
+
       <Toast
         isOpen={Boolean(toastMessage)}
         message={toastMessage || ""}
@@ -483,11 +539,19 @@ export default function SpatialExplorerPage() {
             {/* Drag & Drop Area */}
             <label
               htmlFor="spatial-file-upload"
-              className="border-2 border-dashed border-border-default hover:border-accent-purple/50 bg-bg-base/50 rounded-xl p-4 flex flex-col items-center justify-center text-center cursor-pointer transition-all group"
+              onDragEnter={handleDragEnter}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+              className={`border-2 border-dashed rounded-xl p-4 flex flex-col items-center justify-center text-center cursor-pointer transition-all group select-none ${
+                isDragging
+                  ? "border-accent-purple bg-accent-purple/15 scale-[1.02] shadow-md shadow-accent-purple/10"
+                  : "border-border-default hover:border-accent-purple/50 bg-bg-base/50"
+              }`}
             >
-              <FileSpreadsheet className="w-7 h-7 text-accent-purple mb-2 group-hover:scale-110 transition-transform" />
-              <span className="text-xs font-semibold text-text-primary">
-                {uploadedFileName || "Drop CSV or GeoJSON"}
+              <FileSpreadsheet className={`w-8 h-8 text-accent-purple mb-2 transition-transform ${isDragging ? "animate-bounce scale-110" : "group-hover:scale-110"}`} />
+              <span className="text-xs font-bold text-text-primary">
+                {isDragging ? "Drop CSV or GeoJSON now" : uploadedFileName || "Drag & Drop CSV / GeoJSON"}
               </span>
               <span className="text-[10px] text-text-muted mt-0.5">
                 .csv (auto geocoded) · .geojson · .json
@@ -496,7 +560,7 @@ export default function SpatialExplorerPage() {
                 ref={fileInputRef}
                 id="spatial-file-upload"
                 type="file"
-                accept=".geojson,.json,.csv,.tsv"
+                accept=".geojson,.json,.csv,.tsv,text/csv,application/json"
                 onChange={handleFileUpload}
                 className="hidden"
               />
@@ -601,26 +665,59 @@ export default function SpatialExplorerPage() {
             )}
           </div>
 
-          {/* Layer Controls */}
+          {/* GCC Official Road Network GIS Layer Card */}
           <div className="bg-bg-surface border border-border-default rounded-2xl p-4 shadow-sm space-y-3 select-none">
-            <span className="text-xs font-bold uppercase tracking-wider text-text-secondary flex items-center gap-1.5">
-              <Layers className="w-3.5 h-3.5 text-accent-purple" />
-              GIS Overlays
-            </span>
-
-            <div className="space-y-2 pt-1">
+            <div className="flex items-center justify-between border-b border-border-subtle pb-2.5">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 rounded-lg bg-accent-purple/15 text-accent-purple">
+                  <Layers className="w-3.5 h-3.5" />
+                </div>
+                <div>
+                  <h4 className="text-xs font-bold text-text-primary">GCC Road Network</h4>
+                  <p className="text-[10px] text-text-muted">111,641 Polylines · WGS84</p>
+                </div>
+              </div>
               <button
                 type="button"
-                onClick={() => setShowStreets(!showStreets)}
-                className={`w-full flex items-center justify-between p-2.5 rounded-xl border text-xs font-medium transition-colors ${
+                onClick={() => {
+                  const next = !showStreets;
+                  setShowStreets(next);
+                  setToastMessage(next ? "GCC Road Network: Visible" : "GCC Road Network: Hidden");
+                }}
+                className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border transition-all ${
                   showStreets
-                    ? "bg-accent-purple/10 border-accent-purple/30 text-text-primary"
-                    : "bg-bg-base border-border-subtle text-text-muted"
+                    ? "bg-accent-purple text-btn-primary-text border-accent-purple shadow-sm ring-2 ring-accent-purple/20"
+                    : "bg-bg-base text-text-muted border-border-subtle hover:text-text-primary"
                 }`}
               >
-                <span>Road Network Graph</span>
-                {showStreets ? <Eye className="w-3.5 h-3.5 text-accent-purple" /> : <EyeOff className="w-3.5 h-3.5" />}
+                {showStreets ? "LAYER ON" : "LAYER OFF"}
               </button>
+            </div>
+
+            {/* Road Hierarchy Symbology Legend */}
+            <div className="space-y-1.5 pt-0.5">
+              <span className="text-[10px] uppercase font-bold tracking-wider text-text-muted flex items-center justify-between">
+                <span>Vector Symbology</span>
+                <span className="text-accent-purple font-mono">QGIS Matched</span>
+              </span>
+              <div className="grid grid-cols-2 gap-1.5 text-[10px]">
+                <div className="flex items-center gap-1.5 p-1.5 rounded-lg bg-bg-base border border-border-subtle text-text-secondary">
+                  <span className="w-2.5 h-1 rounded-full bg-[#f59e0b] flex-shrink-0" />
+                  <span className="truncate">Trunk / Highway</span>
+                </div>
+                <div className="flex items-center gap-1.5 p-1.5 rounded-lg bg-bg-base border border-border-subtle text-text-secondary">
+                  <span className="w-2.5 h-1 rounded-full bg-[#38bdf8] flex-shrink-0" />
+                  <span className="truncate">Primary Roads</span>
+                </div>
+                <div className="flex items-center gap-1.5 p-1.5 rounded-lg bg-bg-base border border-border-subtle text-text-secondary">
+                  <span className="w-2.5 h-1 rounded-full bg-[#22c55e] flex-shrink-0" />
+                  <span className="truncate">Secondary Avenues</span>
+                </div>
+                <div className="flex items-center gap-1.5 p-1.5 rounded-lg bg-bg-base border border-border-subtle text-text-secondary">
+                  <span className="w-2.5 h-1 rounded-full bg-[#e11d48] flex-shrink-0" />
+                  <span className="truncate">Local / Residential</span>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -680,7 +777,7 @@ export default function SpatialExplorerPage() {
 
           {/* Tab 1: GIS Map Canvas */}
           {activeTab === "map" ? (
-            <div className="h-[600px] w-full rounded-2xl overflow-hidden border border-border-default shadow-md relative">
+            <div className="h-[620px] w-full rounded-2xl overflow-hidden border border-border-default/90 ring-1 ring-accent-purple/20 shadow-xl shadow-black/10 relative bg-bg-surface">
               <Map
                 center={center}
                 markerPosition={markerPosition}
@@ -690,6 +787,60 @@ export default function SpatialExplorerPage() {
                 customFeatures={parsedFeatures}
                 customPolygons={parsedPolygons}
               />
+
+              {/* Floating Top Left Dataset Status */}
+              <div className="absolute top-3.5 left-3.5 z-[400] flex items-center gap-2 pointer-events-auto select-none">
+                <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-bg-surface/90 backdrop-blur-md border border-border-default/80 text-[11px] font-semibold text-text-primary shadow-sm">
+                  <span className="w-2 h-2 rounded-full bg-status-success animate-pulse" />
+                  <span>
+                    {parsedFeatures.length > 0
+                      ? `${parsedFeatures.length} Custom Features Rendered`
+                      : "Interactive GIS Canvas"}
+                  </span>
+                  {showStreets && (
+                    <span className="text-[10px] text-accent-purple bg-accent-purple-muted px-1.5 py-0.5 rounded font-mono">
+                      Vector Streets
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Floating Top Right Controls */}
+              <div className="absolute top-3.5 right-3.5 z-[400] flex items-center gap-2 pointer-events-auto">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMarkerPosition(null);
+                    setMarkerAddress(null);
+                    setParsedFeatures([]);
+                    setParsedPolygons([]);
+                    setRawRows([]);
+                    setPendingAddressRows([]);
+                    setUploadedFileName(null);
+                    setToastMessage("Map canvas cleared");
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-border-default text-xs font-semibold bg-bg-surface/90 text-text-secondary hover:text-status-error hover:border-status-error/40 backdrop-blur-md transition-all shadow-sm"
+                  title="Clear all markers and loaded layers from map"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Clear Map</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCenter([13.0843, 80.2705])}
+                  className="px-2.5 py-1.5 rounded-xl border border-border-default text-xs font-semibold bg-bg-surface/90 text-text-secondary hover:text-text-primary backdrop-blur-md transition-all shadow-sm"
+                  title="Reset viewport to default center"
+                >
+                  Reset Center
+                </button>
+              </div>
+
+              {/* Floating Bottom Left Coordinate Ticker */}
+              <div className="absolute bottom-3.5 left-3.5 z-[400] hidden sm:flex items-center gap-2 pointer-events-none select-none">
+                <div className="px-2.5 py-1 rounded-lg bg-bg-surface/85 backdrop-blur-md border border-border-subtle text-[10px] font-mono text-text-muted shadow-sm">
+                  Click map to inspect coordinates or drop CSV file anywhere
+                </div>
+              </div>
             </div>
           ) : (
             /* Tab 2: Interactive Data Table Inspector */

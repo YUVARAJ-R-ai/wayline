@@ -21,7 +21,6 @@ import {
   Key,
   ArrowRight,
   Loader2,
-  Code2,
   Plus,
   X,
   Sparkles,
@@ -96,9 +95,7 @@ export default function RoutingMap() {
   // Mode: "route" vs "geocode"
   const [activeTab, setActiveTab] = useState<"route" | "geocode">("route");
   const [routingProfile, setRoutingProfile] = useState<RoutingProfile>("car");
-  const [showApiInspector, setShowApiInspector] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
-  const [copiedResponse, setCopiedResponse] = useState(false);
   const [locatingUser, setLocatingUser] = useState(false);
 
   // Routing Origin, Destination, and Checkpoints
@@ -133,23 +130,6 @@ export default function RoutingMap() {
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [showStreets, setShowStreets] = useState(false);
   const [mapCenter, setMapCenter] = useState<[number, number]>([13.0843, 80.2705]);
-
-  // Telemetry Inspector
-  const [lastApiCall, setLastApiCall] = useState<{
-    endpoint: string;
-    status: number;
-    latencyMs: number;
-    response: any;
-  }>({
-    endpoint: "GET /api/route?from=80.2705,13.0843&to=80.2024,13.0067",
-    status: 200,
-    latencyMs: 14,
-    response: {
-      status: "success",
-      engine: "osrm-routed",
-      message: "Ready for interactive queries",
-    },
-  });
 
   const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || "";
 
@@ -247,50 +227,53 @@ export default function RoutingMap() {
       address: null,
     };
     setCheckpoints((prev) => [...prev, newCheckpoint]);
+    setRoutePoints([]);
+    setInfo(null);
   };
 
   const handleRemoveCheckpoint = (id: string) => {
     setCheckpoints((prev) => prev.filter((c) => c.id !== id));
+    setRoutePoints([]);
+    setInfo(null);
   };
 
   const handleCheckpointChange = (id: string, value: string) => {
     setCheckpoints((prev) =>
       prev.map((c) => (c.id === id ? { ...c, query: value, coord: null, address: null } : c))
     );
+    setRoutePoints([]);
+    setInfo(null);
   };
 
-  // Map Click Handler: smart assignment (Origin -> Checkpoints -> Destination)
+  // Map Click Handler: Set Origin -> Checkpoints -> Destination
   const handleMapClick = (latlng: { lat: number; lng: number }) => {
     const coords: [number, number] = [latlng.lat, latlng.lng];
     const formatted = `${latlng.lat.toFixed(5)}, ${latlng.lng.toFixed(5)}`;
+
+    // Clear stale route whenever map points change
+    setRoutePoints([]);
+    setInfo(null);
 
     if (!fromCoord) {
       setFromCoord(coords);
       setFromAddress(formatted);
       setFromQuery(formatted);
-      setToastMessage("Origin set from map click");
+      setToastMessage("Origin set. Click map for destination.");
+    } else if (!toCoord) {
+      setToCoord(coords);
+      setToAddress(formatted);
+      setToQuery(formatted);
+      setToastMessage("Destination set. Click 'Calculate Route' to navigate.");
     } else {
-      // Find first empty checkpoint
-      const emptyCpIndex = checkpoints.findIndex((c) => !c.coord);
-      if (emptyCpIndex !== -1) {
-        setCheckpoints((prev) =>
-          prev.map((c, i) =>
-            i === emptyCpIndex ? { ...c, coord: coords, address: formatted, query: formatted } : c
-          )
-        );
-        setToastMessage(`Stop #${emptyCpIndex + 1} set from map click`);
-      } else if (!toCoord) {
-        setToCoord(coords);
-        setToAddress(formatted);
-        setToQuery(formatted);
-        setToastMessage("Destination set from map click");
-      } else {
-        // Replace destination
-        setToCoord(coords);
-        setToAddress(formatted);
-        setToQuery(formatted);
-        setToastMessage("Destination updated from map click");
-      }
+      // If both were set, start a fresh route selection with new origin
+      setFromCoord(coords);
+      setFromAddress(formatted);
+      setFromQuery(formatted);
+      setToCoord(null);
+      setToAddress(null);
+      setToQuery("");
+      setCheckpoints([]);
+      setToastMessage("New origin set. Click map for destination.");
     }
   };
 
@@ -308,9 +291,9 @@ export default function RoutingMap() {
     setToCoord(tempC);
     setToAddress(tempA);
 
-    if (fromCoord && toCoord) {
-      fetchRouteMulti([toCoord, ...checkpoints.map((c) => c.coord).filter(Boolean) as [number, number][], fromCoord]);
-    }
+    setRoutePoints([]);
+    setInfo(null);
+    setToastMessage("Swapped Origin and Destination");
   };
 
   // Geolocation
@@ -462,12 +445,6 @@ export default function RoutingMap() {
       }
 
       const latency = Math.round(performance.now() - startPerf);
-      setLastApiCall({
-        endpoint: `GET /api/route (${points.length - 1} legs)`,
-        status: lastStatus,
-        latencyMs: latency,
-        response: lastResp,
-      });
 
       if (combinedPolyline.length > 0) {
         setRoutePoints(combinedPolyline);
@@ -601,13 +578,6 @@ export default function RoutingMap() {
       if (!res.ok) throw new Error("Location not found");
       const data = await res.json();
 
-      setLastApiCall({
-        endpoint: `GET ${url}`,
-        status: res.status,
-        latencyMs: latency,
-        response: data,
-      });
-
       if (data && typeof data.lat === "number" && typeof data.lng === "number") {
         const coords: [number, number] = [data.lat, data.lng];
         setSelectedLocation({
@@ -651,125 +621,87 @@ export default function RoutingMap() {
         onClose={() => setToastMessage(null)}
       />
 
-      {/* Main Sandbox Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      {/* Main Sandbox Grid: 1 Col Left, 2 Cols Right */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
         
-        {/* Left Side Control Panel (1 Col) */}
-        <div className="bg-bg-surface border border-border-default rounded-2xl p-4 shadow-sm flex flex-col justify-between space-y-4">
+        {/* Left Column (1 Col): Route Box + GCC Box + History */}
+        <div className="space-y-4">
           
-          <div className="space-y-4">
-            {/* Tab Mode Bar: Route vs Geocode */}
-            <div className="flex items-center bg-bg-base p-1 rounded-xl border border-border-subtle text-xs font-semibold">
-              <button
-                onClick={() => setActiveTab("route")}
-                className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg transition-colors ${
-                  activeTab === "route"
-                    ? "bg-bg-elevated text-text-primary border border-border-subtle shadow-sm"
-                    : "text-text-muted hover:text-text-secondary"
-                }`}
-              >
+          {/* 1. Route & Navigation Box */}
+          <div className="bg-bg-surface border border-border-default rounded-2xl p-4 shadow-sm space-y-4">
+            
+            {/* Header & Mode Switcher */}
+            <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold uppercase tracking-wider text-text-secondary flex items-center gap-1.5">
                 <Navigation className="w-3.5 h-3.5 text-accent-purple" />
-                <span>Directions</span>
-              </button>
-              <button
-                onClick={() => setActiveTab("geocode")}
-                className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg transition-colors ${
-                  activeTab === "geocode"
-                    ? "bg-bg-elevated text-text-primary border border-border-subtle shadow-sm"
-                    : "text-text-muted hover:text-text-secondary"
-                }`}
-              >
-                <Search className="w-3.5 h-3.5 text-accent-purple" />
-                <span>Geocode</span>
-              </button>
+                Route & Navigation Engine
+              </span>
+              <span className="text-[10px] text-text-muted font-mono">
+                OSRM Gateway
+              </span>
             </div>
 
             {/* Profile Switcher: Driving, Walking, Bicycle, Transit/Bus */}
-            {activeTab === "route" && (
-              <div className="grid grid-cols-4 gap-1 bg-bg-base/70 p-1 rounded-xl border border-border-subtle text-xs">
-                <button
-                  type="button"
-                  onClick={() => handleProfileChange("car")}
-                  className={`flex items-center justify-center gap-1 py-1.5 rounded-lg transition-colors ${
-                    routingProfile === "car"
-                      ? "bg-bg-elevated text-accent-purple font-semibold border border-border-subtle shadow-sm"
-                      : "text-text-muted hover:text-text-secondary"
-                  }`}
-                  title="Driving profile (~42 km/h)"
-                >
-                  <Car className="w-3.5 h-3.5 flex-shrink-0" />
-                  <span className="text-[11px]">Driving</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleProfileChange("foot")}
-                  className={`flex items-center justify-center gap-1 py-1.5 rounded-lg transition-colors ${
-                    routingProfile === "foot"
-                      ? "bg-bg-elevated text-accent-purple font-semibold border border-border-subtle shadow-sm"
-                      : "text-text-muted hover:text-text-secondary"
-                  }`}
-                  title="Walking profile (~4.8 km/h)"
-                >
-                  <Footprints className="w-3.5 h-3.5 flex-shrink-0" />
-                  <span className="text-[11px]">Walking</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleProfileChange("bike")}
-                  className={`flex items-center justify-center gap-1 py-1.5 rounded-lg transition-colors ${
-                    routingProfile === "bike"
-                      ? "bg-bg-elevated text-accent-purple font-semibold border border-border-subtle shadow-sm"
-                      : "text-text-muted hover:text-text-secondary"
-                  }`}
-                  title="Bicycle profile (~15 km/h)"
-                >
-                  <Bike className="w-3.5 h-3.5 flex-shrink-0" />
-                  <span className="text-[11px]">Bicycle</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleProfileChange("bus")}
-                  className={`flex items-center justify-center gap-1 py-1.5 rounded-lg transition-colors ${
-                    routingProfile === "bus"
-                      ? "bg-bg-elevated text-accent-purple font-semibold border border-border-subtle shadow-sm"
-                      : "text-text-muted hover:text-text-secondary"
-                  }`}
-                  title="Bus & Transit profile (~22 km/h + dwell)"
-                >
-                  <Bus className="w-3.5 h-3.5 flex-shrink-0" />
-                  <span className="text-[11px]">Bus</span>
-                </button>
-              </div>
-            )}
-          </div>
-
-          {/* Streamlined API Key Strip */}
-          <div className="bg-bg-base/60 p-2.5 rounded-xl border border-border-subtle space-y-1.5">
-            <div className="flex items-center justify-between text-[11px] font-semibold text-text-secondary">
-              <span className="flex items-center gap-1.5">
-                <Key className="h-3 w-3 text-text-muted" />
-                <span>API Key Override</span>
-              </span>
+            <div className="grid grid-cols-4 gap-1 bg-bg-base/70 p-1 rounded-xl border border-border-subtle text-xs">
               <button
-                onClick={handleSaveApiKey}
-                className="text-[10px] text-accent-purple hover:underline font-semibold"
+                type="button"
+                onClick={() => handleProfileChange("car")}
+                className={`flex items-center justify-center gap-1 py-1.5 rounded-lg transition-colors ${
+                  routingProfile === "car"
+                    ? "bg-bg-elevated text-accent-purple font-semibold border border-border-subtle shadow-sm"
+                    : "text-text-muted hover:text-text-secondary"
+                }`}
+                title="Driving profile (~42 km/h)"
               >
-                {saveSuccess ? "Saved" : "Save"}
+                <Car className="w-3.5 h-3.5 flex-shrink-0" />
+                <span className="text-[11px]">Driving</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleProfileChange("foot")}
+                className={`flex items-center justify-center gap-1 py-1.5 rounded-lg transition-colors ${
+                  routingProfile === "foot"
+                    ? "bg-bg-elevated text-accent-purple font-semibold border border-border-subtle shadow-sm"
+                    : "text-text-muted hover:text-text-secondary"
+                }`}
+                title="Walking profile (~4.8 km/h)"
+              >
+                <Footprints className="w-3.5 h-3.5 flex-shrink-0" />
+                <span className="text-[11px]">Walking</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleProfileChange("bike")}
+                className={`flex items-center justify-center gap-1 py-1.5 rounded-lg transition-colors ${
+                  routingProfile === "bike"
+                    ? "bg-bg-elevated text-accent-purple font-semibold border border-border-subtle shadow-sm"
+                    : "text-text-muted hover:text-text-secondary"
+                }`}
+                title="Bicycle profile (~15 km/h)"
+              >
+                <Bike className="w-3.5 h-3.5 flex-shrink-0" />
+                <span className="text-[11px]">Bicycle</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleProfileChange("bus")}
+                className={`flex items-center justify-center gap-1 py-1.5 rounded-lg transition-colors ${
+                  routingProfile === "bus"
+                    ? "bg-bg-elevated text-accent-purple font-semibold border border-border-subtle shadow-sm"
+                    : "text-text-muted hover:text-text-secondary"
+                }`}
+                title="Bus & Transit profile (~22 km/h + dwell)"
+              >
+                <Bus className="w-3.5 h-3.5 flex-shrink-0" />
+                <span className="text-[11px]">Bus</span>
               </button>
             </div>
-            <input
-              type="password"
-              placeholder="Default session key active (or enter custom key)"
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-              className="w-full rounded-lg bg-bg-surface border border-border-default px-2.5 py-1 text-xs text-text-primary outline-none focus:border-accent-purple font-mono placeholder:text-[11px] placeholder:text-text-muted/60"
-            />
           </div>
 
-          {/* TAB A: DIRECTIONS & ROUTING WITH MULTI-STOP CHECKPOINTS */}
-          {activeTab === "route" ? (
-            <div className="space-y-3">
-              <div className="space-y-2 relative">
+          {/* DIRECTIONS & ROUTING WITH MULTI-STOP CHECKPOINTS */}
+          <div className="space-y-3">
+            <div className="space-y-2 relative">
                 
                 {/* 1. Origin Input */}
                 <div className="space-y-1">
@@ -828,7 +760,7 @@ export default function RoutingMap() {
                 ))}
 
                 {/* Add Checkpoint Button */}
-                <div className="flex items-center justify-between pt-1">
+                <div className="flex items-center justify-between pt-0.5">
                   <button
                     type="button"
                     onClick={handleAddCheckpoint}
@@ -842,7 +774,7 @@ export default function RoutingMap() {
                     type="button"
                     onClick={handleSwapDirections}
                     title="Swap start and destination"
-                    className="text-[10px] text-text-muted hover:text-text-primary flex items-center gap-1"
+                    className="text-[10px] text-text-muted hover:text-text-primary flex items-center gap-1 font-medium"
                   >
                     <ArrowUpDown className="w-3 h-3" />
                     <span>Swap Ends</span>
@@ -850,7 +782,7 @@ export default function RoutingMap() {
                 </div>
 
                 {/* 3. Destination Input */}
-                <div className="space-y-1 pt-1">
+                <div className="space-y-1 pt-0.5">
                   <div className="flex items-center justify-between text-[11px]">
                     <label className="font-semibold text-text-secondary flex items-center gap-1.5">
                       <span className="w-2 h-2 rounded-full bg-status-error inline-block" />
@@ -868,45 +800,50 @@ export default function RoutingMap() {
                 </div>
               </div>
 
-              {/* Recent Route History */}
-              {recentRoutes.length > 0 && (
-                <div className="pt-2 border-t border-border-subtle/60">
-                  <div className="flex items-center justify-between mb-1.5">
-                    <span className="text-[10px] uppercase font-bold tracking-wider text-text-muted flex items-center gap-1">
-                      <History className="w-3 h-3" /> Recent Queries
-                    </span>
-                    <button
-                      onClick={handleClearHistory}
-                      className="text-[10px] text-text-muted hover:text-status-error transition-colors"
-                    >
-                      Clear
-                    </button>
-                  </div>
-                  <div className="space-y-1">
-                    {recentRoutes.slice(0, 3).map((r) => (
-                      <button
-                        key={r.id}
-                        onClick={() => {
-                          setFromCoord(r.fromCoord);
-                          setToCoord(r.toCoord);
-                          setFromAddress(r.fromName);
-                          setToAddress(r.toName);
-                          setFromQuery(r.fromName);
-                          setToQuery(r.toName);
-                          setCheckpoints([]);
-                          fetchRouteMulti([r.fromCoord, r.toCoord]);
-                        }}
-                        className="w-full text-left px-2.5 py-1.5 rounded-lg bg-bg-base hover:bg-bg-elevated border border-border-subtle text-[11px] text-text-secondary hover:text-text-primary transition-colors flex items-center justify-between"
-                      >
-                        <span className="truncate max-w-[210px]">
-                          {r.fromName.split(",")[0]} → {r.toName.split(",")[0]}
-                        </span>
-                        <ArrowRight className="w-3 h-3 text-text-muted flex-shrink-0" />
-                      </button>
-                    ))}
-                  </div>
+              {/* Primary Actions Inside Control Panel */}
+              <div className="flex items-center gap-2 pt-1">
+                <PremiumButton
+                  variant="primary"
+                  size="sm"
+                  loading={loading}
+                  onClick={handleGetRoute}
+                  className="flex-1 justify-center py-2 text-xs"
+                  icon={<Navigation className="w-3.5 h-3.5" />}
+                >
+                  Calculate Route
+                </PremiumButton>
+                <button
+                  onClick={handleClear}
+                  disabled={loading || (!fromCoord && !toCoord && !fromQuery && !toQuery)}
+                  className="bg-bg-base hover:bg-bg-elevated text-text-primary border border-border-default disabled:opacity-40 px-3 py-2 rounded-xl text-xs font-bold transition-colors shadow-sm"
+                  title="Clear all"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              </div>
+
+              {/* Streamlined API Key Strip */}
+              <div className="bg-bg-base/50 p-2.5 rounded-xl border border-border-subtle space-y-1.5">
+                <div className="flex items-center justify-between text-[11px] font-semibold text-text-secondary">
+                  <span className="flex items-center gap-1.5">
+                    <Key className="h-3 w-3 text-text-muted" />
+                    <span>API Key Override</span>
+                  </span>
+                  <button
+                    onClick={handleSaveApiKey}
+                    className="text-[10px] text-accent-purple hover:underline font-semibold"
+                  >
+                    {saveSuccess ? "Saved" : "Save"}
+                  </button>
                 </div>
-              )}
+                <input
+                  type="password"
+                  placeholder="Default session key active (or custom key)"
+                  value={apiKey}
+                  onChange={(e) => setApiKey(e.target.value)}
+                  className="w-full rounded-lg bg-bg-surface border border-border-default px-2.5 py-1 text-xs text-text-primary outline-none focus:border-accent-purple font-mono placeholder:text-[10px] placeholder:text-text-muted/60"
+                />
+              </div>
 
               {error && (
                 <div className="p-2.5 bg-status-error/10 border border-status-error/20 text-status-error rounded-xl text-xs font-medium">
@@ -914,69 +851,101 @@ export default function RoutingMap() {
                 </div>
               )}
             </div>
-          ) : (
-            /* TAB B: GEOCODE SEARCH */
-            <div className="space-y-3">
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  handleSearchLocation();
-                }}
-                className="space-y-2"
-              >
-                <div className="relative">
-                  <Search className="absolute left-3 top-2.5 h-4 w-4 text-text-muted" />
-                  <input
-                    type="text"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Search city, address, or POI..."
-                    className="w-full rounded-xl bg-bg-base border border-border-default py-2 pl-9 pr-16 text-xs text-text-primary placeholder:text-text-muted outline-none focus:border-accent-purple transition-colors"
-                  />
-                  <button
-                    type="submit"
-                    disabled={searchLoading}
-                    className="absolute right-1.5 top-1.5 px-2.5 py-1 bg-accent-purple text-btn-primary-text text-xs font-semibold rounded-lg hover:opacity-90 transition-opacity"
-                  >
-                    {searchLoading ? "..." : "Find"}
-                  </button>
-                </div>
-              </form>
+          </div>
 
-              {/* Resolved Location Box */}
-              {selectedLocation && (
-                <div className="p-3 bg-bg-base border border-border-subtle rounded-xl space-y-2">
-                  <div className="flex items-start gap-2">
-                    <MapPin className="w-4 h-4 text-accent-purple flex-shrink-0 mt-0.5" />
-                    <div>
-                      <div className="text-xs font-bold text-text-primary leading-snug">
-                        {selectedLocation.address}
-                      </div>
-                      <div className="text-[11px] font-mono text-text-muted mt-0.5">
-                        {selectedLocation.lat.toFixed(4)}° N, {selectedLocation.lng.toFixed(4)}° E
-                      </div>
-                    </div>
-                  </div>
-                  <div className="pt-2 border-t border-border-subtle flex items-center justify-between text-xs">
-                    <span className="font-mono text-[11px] text-accent-purple font-semibold">
-                      {selectedLocation.latency}ms
-                    </span>
-                    <button
-                      onClick={() => {
-                        setFromCoord([selectedLocation.lat, selectedLocation.lng]);
-                        setFromAddress(selectedLocation.address);
-                        setFromQuery(selectedLocation.address);
-                        setActiveTab("route");
-                        setToastMessage("Start point set from search");
-                      }}
-                      className="inline-flex items-center gap-1 text-[11px] font-semibold text-accent-purple hover:underline"
-                    >
-                      <span>Route here</span>
-                      <ArrowRight className="w-3 h-3" />
-                    </button>
-                  </div>
+          {/* GCC Official Road Network GIS Layer Card */}
+          <div className="bg-bg-surface border border-border-default rounded-2xl p-4 shadow-sm space-y-3">
+            <div className="flex items-center justify-between border-b border-border-subtle pb-2.5">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 rounded-lg bg-accent-purple/15 text-accent-purple">
+                  <Layers className="w-3.5 h-3.5" />
                 </div>
-              )}
+                <div>
+                  <h4 className="text-xs font-bold text-text-primary">GCC Road Network</h4>
+                  <p className="text-[10px] text-text-muted">111,641 Polylines · WGS84</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  const next = !showStreets;
+                  setShowStreets(next);
+                  setToastMessage(next ? "GCC Road Network Overlay: Active" : "GCC Road Network: Hidden");
+                }}
+                className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border transition-all ${
+                  showStreets
+                    ? "bg-accent-purple text-btn-primary-text border-accent-purple shadow-sm ring-2 ring-accent-purple/20"
+                    : "bg-bg-base text-text-muted border-border-subtle hover:text-text-primary"
+                }`}
+              >
+                {showStreets ? "LAYER ON" : "LAYER OFF"}
+              </button>
+            </div>
+
+            {/* Road Hierarchy Symbology Legend */}
+            <div className="space-y-1.5 pt-0.5">
+              <span className="text-[10px] uppercase font-bold tracking-wider text-text-muted flex items-center justify-between">
+                <span>Vector Symbology</span>
+                <span className="text-accent-purple font-mono">QGIS Matched</span>
+              </span>
+              <div className="grid grid-cols-2 gap-1.5 text-[10px]">
+                <div className="flex items-center gap-1.5 p-1.5 rounded-lg bg-bg-base border border-border-subtle text-text-secondary">
+                  <span className="w-2.5 h-1 rounded-full bg-[#f59e0b] flex-shrink-0" />
+                  <span className="truncate">Trunk / Motorway</span>
+                </div>
+                <div className="flex items-center gap-1.5 p-1.5 rounded-lg bg-bg-base border border-border-subtle text-text-secondary">
+                  <span className="w-2.5 h-1 rounded-full bg-[#38bdf8] flex-shrink-0" />
+                  <span className="truncate">Primary Roads</span>
+                </div>
+                <div className="flex items-center gap-1.5 p-1.5 rounded-lg bg-bg-base border border-border-subtle text-text-secondary">
+                  <span className="w-2.5 h-1 rounded-full bg-[#22c55e] flex-shrink-0" />
+                  <span className="truncate">Secondary Avenues</span>
+                </div>
+                <div className="flex items-center gap-1.5 p-1.5 rounded-lg bg-bg-base border border-border-subtle text-text-secondary">
+                  <span className="w-2.5 h-1 rounded-full bg-[#e11d48] flex-shrink-0" />
+                  <span className="truncate">Local / Residential</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Recent Queries / Route History Card */}
+          {recentRoutes.length > 0 && (
+            <div className="bg-bg-surface border border-border-default rounded-2xl p-4 shadow-sm space-y-2.5">
+              <div className="flex items-center justify-between border-b border-border-subtle pb-2">
+                <span className="text-[10px] uppercase font-bold tracking-wider text-text-muted flex items-center gap-1">
+                  <History className="w-3 h-3 text-accent-purple" /> Recent Queries
+                </span>
+                <button
+                  onClick={handleClearHistory}
+                  className="text-[10px] text-text-muted hover:text-status-error transition-colors font-medium"
+                >
+                  Clear
+                </button>
+              </div>
+              <div className="space-y-1.5">
+                {recentRoutes.slice(0, 4).map((r) => (
+                  <button
+                    key={r.id}
+                    onClick={() => {
+                      setFromCoord(r.fromCoord);
+                      setToCoord(r.toCoord);
+                      setFromAddress(r.fromName);
+                      setToAddress(r.toName);
+                      setFromQuery(r.fromName);
+                      setToQuery(r.toName);
+                      setCheckpoints([]);
+                      fetchRouteMulti([r.fromCoord, r.toCoord]);
+                    }}
+                    className="w-full text-left p-2 rounded-xl bg-bg-base hover:bg-bg-elevated border border-border-subtle text-[11px] text-text-secondary hover:text-text-primary transition-colors flex items-center justify-between group"
+                  >
+                    <span className="truncate max-w-[210px] group-hover:text-accent-purple transition-colors">
+                      {r.fromName.split(",")[0]} → {r.toName.split(",")[0]}
+                    </span>
+                    <ArrowRight className="w-3 h-3 text-text-muted group-hover:text-accent-purple group-hover:translate-x-0.5 transition-all flex-shrink-0" />
+                  </button>
+                ))}
+              </div>
             </div>
           )}
         </div>
@@ -984,8 +953,8 @@ export default function RoutingMap() {
         {/* Right Map Canvas & Live Inspector (2 Cols) */}
         <div className="lg:col-span-2 space-y-4">
           
-          {/* Map Container */}
-          <div className="h-[520px] w-full rounded-2xl overflow-hidden border border-border-default shadow-md relative">
+          {/* Map Container with Ambient Highlight */}
+          <div className="h-[560px] w-full rounded-2xl overflow-hidden border border-border-default/90 ring-1 ring-accent-purple/20 shadow-xl shadow-black/10 relative bg-bg-surface">
             <Map
               center={mapCenter}
               markerPosition={selectedLocation ? [selectedLocation.lat, selectedLocation.lng] : null}
@@ -1003,29 +972,62 @@ export default function RoutingMap() {
               apiKey={apiKey}
             />
 
+            {/* Top Left Floating Status Indicator */}
+            <div className="absolute top-3.5 left-3.5 z-[400] flex items-center gap-2 pointer-events-auto select-none">
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-bg-surface/90 backdrop-blur-md border border-border-default/80 text-[11px] font-semibold text-text-primary shadow-sm">
+                <span className="w-2 h-2 rounded-full bg-status-success animate-pulse" />
+                <span>
+                  {routingProfile === "car"
+                    ? "Driving Network"
+                    : routingProfile === "foot"
+                    ? "Pedestrian Paths"
+                    : routingProfile === "bike"
+                    ? "Cycling Grid"
+                    : "Transit / Bus"}
+                </span>
+                {showStreets && (
+                  <span className="text-[10px] text-accent-purple bg-accent-purple-muted px-1.5 py-0.5 rounded font-mono">
+                    Vectors Active
+                  </span>
+                )}
+              </div>
+            </div>
+
             {/* Floating Quick Action & Status Controls */}
-            <div className="absolute top-3 right-3 z-[400] flex items-center gap-2">
+            <div className="absolute top-3.5 right-3.5 z-[400] flex items-center gap-2 pointer-events-auto">
               <button
-                onClick={() => setShowApiInspector(!showApiInspector)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-semibold backdrop-blur-md transition-all shadow-sm ${
-                  showApiInspector
-                    ? "bg-accent-purple text-btn-primary-text border-accent-purple"
-                    : "bg-bg-surface/90 border-border-default text-text-secondary hover:text-text-primary"
-                }`}
+                onClick={handleClear}
+                disabled={!fromCoord && !toCoord && !fromQuery && !toQuery && !selectedLocation && routePoints.length === 0}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-border-default text-xs font-semibold bg-bg-surface/90 text-text-secondary hover:text-status-error hover:border-status-error/40 disabled:opacity-40 backdrop-blur-md transition-all shadow-sm"
+                title="Clear all points, route, and search pins from the map"
               >
-                <Code2 className="w-3.5 h-3.5" />
-                <span>Telemetry</span>
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Clear Map</span>
               </button>
+              <button
+                onClick={() => setMapCenter([13.0843, 80.2705])}
+                className="px-3 py-1.5 rounded-xl border border-border-default text-xs font-semibold bg-bg-surface/90 text-text-secondary hover:text-text-primary backdrop-blur-md transition-all shadow-sm"
+                title="Reset map view to Chennai center"
+              >
+                Reset View
+              </button>
+            </div>
+
+            {/* Bottom Floating Coordinate Bar */}
+            <div className="absolute bottom-3.5 left-3.5 z-[400] hidden sm:flex items-center gap-2 pointer-events-none select-none">
+              <div className="px-2.5 py-1 rounded-lg bg-bg-surface/85 backdrop-blur-md border border-border-subtle text-[10px] font-mono text-text-muted shadow-sm">
+                Click map to select Origin / Destination
+              </div>
             </div>
           </div>
 
           {/* Results Summary Bar */}
-          {info && activeTab === "route" && (
+          {info && (
             <div className="p-4 bg-bg-surface border border-border-default rounded-2xl shadow-sm space-y-3">
               <div className="flex items-center justify-between text-xs font-bold text-text-secondary">
                 <span className="flex items-center gap-1.5">
-                  <Info className="h-3.5 w-3.5 text-accent-purple" />
-                  Route Telemetry Summary
+                  <Navigation className="h-3.5 w-3.5 text-accent-purple" />
+                  Route Summary
                 </span>
                 <div className="flex items-center gap-2">
                   <Badge variant="accent" size="sm">
@@ -1038,8 +1040,8 @@ export default function RoutingMap() {
                       : "Transit / Bus"}
                   </Badge>
                   {info.latency && (
-                    <span className="font-mono text-[11px] text-accent-purple font-semibold">
-                      {info.latency}ms
+                    <span className="font-mono text-[11px] text-text-muted font-medium">
+                      Calculated in {info.latency}ms
                     </span>
                   )}
                 </div>
@@ -1081,84 +1083,6 @@ export default function RoutingMap() {
                   <span>Copy Coords ({routePoints.length})</span>
                 </button>
               </div>
-            </div>
-          )}
-
-          {/* Action buttons & Street Grid toggle */}
-          {activeTab === "route" && (
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex gap-2 flex-1">
-                <PremiumButton
-                  variant="primary"
-                  size="sm"
-                  loading={loading}
-                  onClick={handleGetRoute}
-                  className="flex-1 justify-center py-2"
-                  icon={<Navigation className="w-3.5 h-3.5" />}
-                >
-                  Calculate Route
-                </PremiumButton>
-                <button
-                  onClick={handleClear}
-                  disabled={loading || (!fromCoord && !toCoord && !fromQuery && !toQuery)}
-                  className="bg-bg-surface hover:bg-bg-elevated text-text-primary border border-border-default disabled:opacity-50 px-3.5 rounded-xl text-xs font-bold transition-colors shadow-sm"
-                  title="Clear all"
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
-              </div>
-
-              {/* Street Overlay Toggle */}
-              <div className="flex items-center gap-2 text-xs text-text-secondary bg-bg-surface border border-border-default px-3 py-1.5 rounded-xl shadow-sm">
-                <Layers className="w-3.5 h-3.5 text-accent-purple" />
-                <span>Streets</span>
-                <button
-                  onClick={() => setShowStreets(!showStreets)}
-                  className={`px-2 py-0.5 rounded-md text-[10px] font-semibold border transition-colors ${
-                    showStreets
-                      ? "bg-accent-purple text-btn-primary-text border-transparent"
-                      : "bg-bg-elevated text-text-muted border-border-subtle hover:text-text-primary"
-                  }`}
-                >
-                  {showStreets ? "ON" : "OFF"}
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Collapsible Telemetry Inspector Drawer */}
-          {showApiInspector && (
-            <div className="p-4 bg-bg-surface border border-border-default rounded-2xl shadow-sm space-y-3 font-mono text-xs">
-              <div className="flex items-center justify-between pb-2 border-b border-border-subtle">
-                <div className="flex items-center gap-2">
-                  <Badge variant="neutral" size="sm">
-                    {lastApiCall.status} OK
-                  </Badge>
-                  <span className="text-[11px] text-text-primary truncate max-w-[280px]">
-                    {lastApiCall.endpoint}
-                  </span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-[10px] text-accent-purple font-semibold">
-                    {lastApiCall.latencyMs}ms
-                  </span>
-                  <button
-                    onClick={() => {
-                      navigator.clipboard.writeText(JSON.stringify(lastApiCall.response, null, 2));
-                      setCopiedResponse(true);
-                      setTimeout(() => setCopiedResponse(false), 2000);
-                    }}
-                    className="p-1 rounded-md hover:bg-bg-elevated text-text-muted hover:text-text-primary transition-colors"
-                    title="Copy response JSON"
-                  >
-                    {copiedResponse ? <Check className="w-3.5 h-3.5 text-accent-purple" /> : <Copy className="w-3.5 h-3.5" />}
-                  </button>
-                </div>
-              </div>
-
-              <pre className="p-3 bg-bg-base rounded-xl text-[11px] text-text-secondary overflow-x-auto max-h-48 border border-border-subtle">
-                {JSON.stringify(lastApiCall.response, null, 2)}
-              </pre>
             </div>
           )}
 
