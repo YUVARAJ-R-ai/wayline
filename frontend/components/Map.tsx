@@ -1,11 +1,25 @@
 "use client";
 
 import { useEffect, useRef } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, ZoomControl, useMap, useMapEvents, Polyline } from 'react-leaflet'; 
+import { MapContainer, TileLayer, Marker, Popup, ZoomControl, useMap, useMapEvents, Polyline, Polygon } from 'react-leaflet'; 
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import 'leaflet-defaulticon-compatibility/dist/leaflet-defaulticon-compatibility.webpack.css';
 import 'leaflet-defaulticon-compatibility';
+
+export interface CustomSpatialFeature {
+  lat: number;
+  lng: number;
+  label?: string;
+  properties?: Record<string, any>;
+  color?: string;
+}
+
+export interface CustomSpatialPolygon {
+  coordinates: Array<[number, number]>;
+  label?: string;
+  color?: string;
+}
 
 interface MapProps {
   center?: [number, number];
@@ -19,16 +33,12 @@ interface MapProps {
   toAddress?: string | null;
   showStreets?: boolean;
   apiKey?: string | null;
+  customFeatures?: CustomSpatialFeature[];
+  customPolygons?: CustomSpatialPolygon[];
 }
 
 const DEFAULT_CENTER: [number, number] = [13.0843, 80.2705];
-
-// Below this zoom level the GCC street overlay is hidden — 94k streets are far
-// too many to render at city scale, so we only fetch the current viewport once
-// the user is zoomed in enough for the data to be useful.
 const STREET_ZOOM_THRESHOLD = 14;
-// Empty default = same-origin: in production the browser hits /api/* on the
-// nginx host. NEXT_PUBLIC_API_URL is only set (to a full URL) in local dev.
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '';
 
 // Helper to create custom SVG pin icons
@@ -60,7 +70,7 @@ function ChangeView({ center, zoom }: { center: [number, number]; zoom: number }
   return null;
 }
 
-// Fit map bounds to the polyline route
+// Fit map bounds to polyline route
 function FitRouteBounds({ polyline }: { polyline?: Array<[number, number]> }) {
   const map = useMap();
   useEffect(() => {
@@ -77,6 +87,24 @@ function FitRouteBounds({ polyline }: { polyline?: Array<[number, number]> }) {
   return null;
 }
 
+// Fit map bounds to custom uploaded features
+function FitFeaturesBounds({ features }: { features?: CustomSpatialFeature[] }) {
+  const map = useMap();
+  useEffect(() => {
+    if (features && features.length > 0) {
+      const coords = features.map((f) => [f.lat, f.lng] as [number, number]);
+      const bounds = L.latLngBounds(coords);
+      map.fitBounds(bounds, {
+        padding: [60, 60],
+        maxZoom: 15,
+        animate: true,
+        duration: 1.2,
+      });
+    }
+  }, [features, map]);
+  return null;
+}
+
 // Capture map click events
 function MapClickEvents({ onMapClick }: { onMapClick?: (latlng: { lat: number; lng: number }) => void }) {
   useMapEvents({
@@ -87,10 +115,6 @@ function MapClickEvents({ onMapClick }: { onMapClick?: (latlng: { lat: number; l
   return null;
 }
 
-// Greater Chennai Corporation street overlay. Fetches the streets within the
-// current viewport from /api/streets (bbox-filtered) whenever the map moves,
-// and only while zoomed in past STREET_ZOOM_THRESHOLD. Manages its own Leaflet
-// GeoJSON layer imperatively so it can be replaced cheaply on each pan/zoom.
 function StreetOverlay({ show, apiKey }: { show?: boolean; apiKey?: string | null }) {
   const map = useMap();
   const layerRef = useRef<L.GeoJSON | null>(null);
@@ -130,13 +154,12 @@ function StreetOverlay({ show, apiKey }: { show?: boolean; apiKey?: string | nul
         }
       }).addTo(map);
     } catch {
-      // Overlay is best-effort; failures should never break the map.
+      // Overlay is best-effort
     }
   };
 
   useMapEvents({ moveend: refresh, zoomend: refresh });
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     refresh();
     return () => clearLayer();
@@ -156,13 +179,14 @@ export default function Map({
   fromAddress,
   toAddress,
   showStreets,
-  apiKey
+  apiKey,
+  customFeatures = [],
+  customPolygons = []
 }: MapProps) {
   const markerRef = useRef<L.Marker>(null);
   const fromMarkerRef = useRef<L.Marker>(null);
   const toMarkerRef = useRef<L.Marker>(null);
 
-  // Auto-open popups on update
   useEffect(() => {
     if (markerPosition && markerRef.current) {
       markerRef.current.openPopup();
@@ -183,6 +207,8 @@ export default function Map({
 
   const sageIcon = createCustomIcon('#436352'); // Brand Sage
   const redIcon = createCustomIcon('#B84343');   // Status Error Red
+  const ochreIcon = createCustomIcon('#C7944B'); // Ochre Warning
+  const tealIcon = createCustomIcon('#2D7A78');  // Teal Accent
 
   return (
     <MapContainer 
@@ -190,10 +216,11 @@ export default function Map({
       zoom={13} 
       scrollWheelZoom={true}
       style={{ height: '100%', width: '100%' }}
-      zoomControl={false} // THIS LINE IS CRITICAL
+      zoomControl={false}
     >
       <ChangeView center={center} zoom={13} />
       <FitRouteBounds polyline={polyline} />
+      <FitFeaturesBounds features={customFeatures} />
       <MapClickEvents onMapClick={onMapClick} />
       <StreetOverlay show={showStreets} apiKey={apiKey} />
       <ZoomControl position="bottomright" /> 
@@ -204,7 +231,7 @@ export default function Map({
       />
       
       {/* Search landing marker */}
-      {markerPosition && !fromPosition && !toPosition && (
+      {markerPosition && !fromPosition && !toPosition && customFeatures.length === 0 && (
         <Marker position={markerPosition} icon={sageIcon} ref={markerRef}>
           {markerAddress && (
             <Popup>
@@ -234,7 +261,52 @@ export default function Map({
         </Marker>
       )}
 
-      {/* Polyline Route with Crisp Brand Layering */}
+      {/* Uploaded CSV / Custom Feature Markers */}
+      {customFeatures.map((feat, idx) => {
+        const markerIcon = feat.color === 'ochre' ? ochreIcon : feat.color === 'teal' ? tealIcon : sageIcon;
+        return (
+          <Marker key={`feat-${idx}-${feat.lat}-${feat.lng}`} position={[feat.lat, feat.lng]} icon={markerIcon}>
+            <Popup>
+              <div className="p-1 max-w-[220px]">
+                <div className="font-bold text-text-primary text-sm border-b border-border-subtle pb-1 mb-1.5">
+                  {feat.label || `Point #${idx + 1}`}
+                </div>
+                <div className="text-[11px] text-text-secondary font-mono mb-1">
+                  Lat: {feat.lat.toFixed(5)}, Lng: {feat.lng.toFixed(5)}
+                </div>
+                {feat.properties && Object.keys(feat.properties).length > 0 && (
+                  <div className="space-y-0.5 mt-1 pt-1 border-t border-border-subtle text-[10px] text-text-muted">
+                    {Object.entries(feat.properties).slice(0, 4).map(([k, v]) => (
+                      <div key={k} className="flex justify-between gap-2 truncate">
+                        <span className="font-semibold text-text-secondary">{k}:</span>
+                        <span className="truncate">{String(v)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </Popup>
+          </Marker>
+        );
+      })}
+
+      {/* Uploaded Custom Polygons */}
+      {customPolygons.map((poly, idx) => (
+        <Polygon
+          key={`poly-${idx}`}
+          positions={poly.coordinates}
+          pathOptions={{
+            color: poly.color || '#436352',
+            fillColor: poly.color || '#436352',
+            fillOpacity: 0.18,
+            weight: 2,
+          }}
+        >
+          {poly.label && <Popup>{poly.label}</Popup>}
+        </Polygon>
+      ))}
+
+      {/* Polyline Route */}
       {polyline && polyline.length > 0 && (
         <>
           <Polyline positions={polyline} color="#1F2A1F" weight={7} opacity={0.8} />
