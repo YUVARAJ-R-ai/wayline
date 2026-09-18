@@ -1,23 +1,23 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import {
   Search,
-  Zap,
-  Compass,
-  Key,
-  Server,
-  ArrowRight,
-  Check,
-  Copy,
-  Terminal,
-  Activity,
-  Shield,
-  Menu,
-  X,
-  Code2,
   Navigation,
+  Compass,
+  MapPin,
+  ArrowRight,
+  RotateCcw,
+  Zap,
+  Code2,
+  Copy,
+  Check,
+  X,
+  Layers,
+  Layers2,
+  ArrowUpDown,
 } from "lucide-react";
 import {
   WaylineLogo,
@@ -26,104 +26,287 @@ import {
   Toast,
 } from "@/components/ui";
 
-export default function HomePageClient() {
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [activeCodeTab, setActiveCodeTab] = useState<"curl" | "typescript" | "python">("curl");
-  const [copiedSnippet, setCopiedSnippet] = useState(false);
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
+// Dynamically import Leaflet Map to avoid SSR window issues
+const Map = dynamic(() => import("@/components/Map"), {
+  ssr: false,
+  loading: () => (
+    <div className="h-full w-full bg-bg-surface flex items-center justify-center">
+      <div className="flex flex-col items-center gap-3">
+        <div className="w-8 h-8 rounded-full border-2 border-accent-purple border-t-transparent animate-spin" />
+        <span className="text-xs text-text-muted font-mono">Loading Wayline Map Engine...</span>
+      </div>
+    </div>
+  ),
+});
 
-  // Live Interactive Playground State
-  const [searchQuery, setSearchQuery] = useState("Chennai, Tamil Nadu");
-  const [isSearching, setIsSearching] = useState(false);
-  const [demoResult, setDemoResult] = useState<{
+export default function HomePageClient() {
+  // Navigation / Tab mode
+  const [activeMode, setActiveMode] = useState<"search" | "route">("search");
+  const [showApiInspector, setShowApiInspector] = useState(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [copiedText, setCopiedText] = useState(false);
+
+  // Map state
+  const [mapCenter, setMapCenter] = useState<[number, number]>([13.0843, 80.2705]);
+  const [showStreets, setShowStreets] = useState(false);
+
+  // Geocoding / Search state
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [selectedLocation, setSelectedLocation] = useState<{
     lat: number;
     lng: number;
     address: string;
-    latency: number;
-  }>({
+    latency?: number;
+  } | null>({
     lat: 13.0843,
     lng: 80.2705,
     address: "Chennai, Tamil Nadu, India",
     latency: 14,
   });
 
-  const handleDemoSearch = async (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-    if (!searchQuery.trim()) return;
+  // Routing state
+  const [fromCoord, setFromCoord] = useState<[number, number] | null>(null);
+  const [toCoord, setToCoord] = useState<[number, number] | null>(null);
+  const [fromAddress, setFromAddress] = useState<string | null>(null);
+  const [toAddress, setToAddress] = useState<string | null>(null);
+  const [fromQuery, setFromQuery] = useState("");
+  const [toQuery, setToQuery] = useState("");
+  const [routePoints, setRoutePoints] = useState<Array<[number, number]>>([]);
+  const [routeStats, setRouteStats] = useState<{
+    distanceKm: number;
+    durationMin: number;
+    latency?: number;
+  } | null>(null);
+  const [routingLoading, setRoutingLoading] = useState(false);
+  const [routingError, setRoutingError] = useState<string | null>(null);
 
-    setIsSearching(true);
+  // Last executed raw API telemetry
+  const [lastApiCall, setLastApiCall] = useState<{
+    endpoint: string;
+    status: number;
+    latencyMs: number;
+    response: any;
+  }>({
+    endpoint: "GET /api/geocode?q=chennai",
+    status: 200,
+    latencyMs: 14,
+    response: {
+      status: "success",
+      address: "Chennai, Tamil Nadu, India",
+      lat: 13.0843,
+      lng: 80.2705,
+    },
+  });
+
+  // Execute Geocoding Search
+  const handleSearch = async (queryToSearch?: string) => {
+    const q = queryToSearch || searchQuery;
+    if (!q.trim()) return;
+
+    setSearchLoading(true);
     const start = performance.now();
 
     try {
-      const res = await fetch(`/api/geocode?q=${encodeURIComponent(searchQuery)}`);
+      const res = await fetch(`/api/geocode?q=${encodeURIComponent(q.trim())}`);
       const latency = Math.round(performance.now() - start);
+      const data = await res.json();
 
-      if (res.ok) {
-        const data = await res.json();
-        setDemoResult({
-          lat: data.lat ?? 13.0843,
-          lng: data.lng ?? 80.2705,
-          address: data.address ?? searchQuery,
-          latency: latency > 0 ? latency : 12,
-        });
-        setToastMessage(`Geocoded in ${latency}ms`);
+      setLastApiCall({
+        endpoint: `GET /api/geocode?q=${encodeURIComponent(q.trim())}`,
+        status: res.status,
+        latencyMs: latency,
+        response: data,
+      });
+
+      if (res.ok && data && typeof data.lat === "number" && typeof data.lng === "number") {
+        const newLocation = {
+          lat: data.lat,
+          lng: data.lng,
+          address: data.address || q,
+          latency,
+        };
+        setSelectedLocation(newLocation);
+        setMapCenter([data.lat, data.lng]);
+        setToastMessage(`Found: ${data.address || q}`);
+      } else {
+        setToastMessage("Location not found. Try a different search.");
       }
-    } catch {
-      setDemoResult((prev) => ({
-        ...prev,
-        latency: Math.round(performance.now() - start),
-      }));
+    } catch (err) {
+      console.error(err);
+      setToastMessage("Failed to connect to geocoding engine.");
     } finally {
-      setIsSearching(false);
+      setSearchLoading(false);
     }
   };
 
-  const codeSnippets = {
-    curl: `# 1. Calculate turn-by-turn driving route
-curl -X GET "https://api.wayline.dev/api/route?from=80.2522,13.0952&to=80.2700,13.0839" \\
-  -H "x-api-key: wlk_prod_99f8c12a"
+  // Execute Route Calculation
+  const handleCalculateRoute = async (
+    startCoord?: [number, number],
+    endCoord?: [number, number]
+  ) => {
+    const start = startCoord || fromCoord;
+    const end = endCoord || toCoord;
 
-# 2. Forward Geocode Location
-curl -X GET "https://api.wayline.dev/api/geocode?q=Chennai" \\
-  -H "x-api-key: wlk_prod_99f8c12a"`,
+    if (!start || !end) {
+      setRoutingError("Please select both start and destination points.");
+      return;
+    }
 
-    typescript: `import { WaylineClient } from "@wayline/sdk";
+    setRoutingLoading(true);
+    setRoutingError(null);
+    const startPerf = performance.now();
 
-const wayline = new WaylineClient({
-  apiKey: process.env.WAYLINE_API_KEY, // wlk_prod_...
-});
+    try {
+      const url = `/api/route?from=${start[1]},${start[0]}&to=${end[1]},${end[0]}`;
+      const res = await fetch(url);
+      const latency = Math.round(performance.now() - startPerf);
+      const data = await res.json();
 
-// Compute sub-10ms driving route
-const route = await wayline.route({
-  from: [80.2522, 13.0952],
-  to: [80.2700, 13.0839],
-  geometries: "geojson",
-});
+      setLastApiCall({
+        endpoint: `GET ${url}`,
+        status: res.status,
+        latencyMs: latency,
+        response: data,
+      });
 
-console.log(\`Distance: \${route.distance}km, ETA: \${route.duration}min\`);`,
+      if (!res.ok) {
+        throw new Error("Could not calculate a driving route between these coordinates.");
+      }
 
-    python: `from wayline import Wayline
+      let leafletCoords: Array<[number, number]> = [];
+      let distanceKm = 0;
+      let durationMin = 0;
 
-client = Wayline(api_key="wlk_prod_99f8c12a")
+      if (data && data.coordinates) {
+        leafletCoords = data.coordinates.map((c: [number, number]) => [c[1], c[0]]);
+        // Approximate distance if not in response
+        const totalDist = leafletCoords.reduce((acc, curr, idx) => {
+          if (idx === 0) return 0;
+          const prev = leafletCoords[idx - 1];
+          const dLat = (curr[0] - prev[0]) * 111;
+          const dLng = (curr[1] - prev[1]) * 111 * Math.cos((curr[0] * Math.PI) / 180);
+          return acc + Math.sqrt(dLat * dLat + dLng * dLng);
+        }, 0);
 
-# Query route with GeoJSON geometry
-route = client.routes.get(
-    origin=[80.2522, 13.0952],
-    destination=[80.2700, 13.0839]
-)
+        distanceKm = Math.round(totalDist * 10) / 10;
+        durationMin = Math.max(1, Math.round((distanceKm / 40) * 60));
+      } else if (data && data.routes && data.routes[0]) {
+        const route = data.routes[0];
+        if (route.geometry && route.geometry.coordinates) {
+          leafletCoords = route.geometry.coordinates.map((c: [number, number]) => [c[1], c[0]]);
+        }
+        distanceKm = Math.round((route.distance / 1000) * 10) / 10;
+        durationMin = Math.round(route.duration / 60);
+      }
 
-print(f"Distance: {route.distance} km | Duration: {route.duration} min")`,
+      if (leafletCoords.length > 0) {
+        setRoutePoints(leafletCoords);
+        setRouteStats({
+          distanceKm: distanceKm || 4.2,
+          durationMin: durationMin || 8,
+          latency,
+        });
+        setToastMessage(`Route calculated in ${latency}ms`);
+      } else {
+        throw new Error("No route geometry returned.");
+      }
+    } catch (err: any) {
+      console.error(err);
+      setRoutingError(err.message || "Failed to calculate route.");
+    } finally {
+      setRoutingLoading(false);
+    }
   };
 
-  const handleCopyCode = () => {
-    navigator.clipboard.writeText(codeSnippets[activeCodeTab]);
-    setCopiedSnippet(true);
-    setToastMessage("Code snippet copied to clipboard");
-    setTimeout(() => setCopiedSnippet(false), 2000);
+  // Map Click Handler: Click 1 -> Start, Click 2 -> Destination & Auto Route, Click 3 -> Reset
+  const handleMapClick = async (latlng: { lat: number; lng: number }) => {
+    const coord: [number, number] = [latlng.lat, latlng.lng];
+
+    if (!fromCoord || (fromCoord && toCoord)) {
+      // Step 1: Set Start Point
+      setFromCoord(coord);
+      setToCoord(null);
+      setRoutePoints([]);
+      setRouteStats(null);
+      setFromQuery(`${latlng.lat.toFixed(4)}, ${latlng.lng.toFixed(4)}`);
+      setFromAddress("Resolving address...");
+      setActiveMode("route");
+
+      try {
+        const res = await fetch(`/api/reverse-geocode?lat=${latlng.lat}&lng=${latlng.lng}`);
+        if (res.ok) {
+          const data = await res.json();
+          setFromAddress(data.address || `Location (${latlng.lat.toFixed(4)}, ${latlng.lng.toFixed(4)})`);
+          setFromQuery(data.address || `${latlng.lat.toFixed(4)}, ${latlng.lng.toFixed(4)}`);
+        }
+      } catch {
+        setFromAddress(`Location (${latlng.lat.toFixed(4)}, ${latlng.lng.toFixed(4)})`);
+      }
+    } else if (!toCoord) {
+      // Step 2: Set Destination Point & Auto Calculate Route
+      setToCoord(coord);
+      setToQuery(`${latlng.lat.toFixed(4)}, ${latlng.lng.toFixed(4)}`);
+      setToAddress("Resolving address...");
+
+      let destAddress = `Location (${latlng.lat.toFixed(4)}, ${latlng.lng.toFixed(4)})`;
+      try {
+        const res = await fetch(`/api/reverse-geocode?lat=${latlng.lat}&lng=${latlng.lng}`);
+        if (res.ok) {
+          const data = await res.json();
+          destAddress = data.address || destAddress;
+          setToAddress(destAddress);
+          setToQuery(destAddress);
+        }
+      } catch {
+        setToAddress(destAddress);
+      }
+
+      // Automatically trigger route calculation
+      handleCalculateRoute(fromCoord, coord);
+    }
+  };
+
+  const handleClearRoute = () => {
+    setFromCoord(null);
+    setToCoord(null);
+    setFromAddress(null);
+    setToAddress(null);
+    setFromQuery("");
+    setToQuery("");
+    setRoutePoints([]);
+    setRouteStats(null);
+    setRoutingError(null);
+    setSelectedLocation(null);
+  };
+
+  const handleSwapDirections = () => {
+    const tempCoord = fromCoord;
+    const tempAddress = fromAddress;
+    const tempQuery = fromQuery;
+
+    setFromCoord(toCoord);
+    setFromAddress(toAddress);
+    setFromQuery(toQuery);
+
+    setToCoord(tempCoord);
+    setToAddress(tempAddress);
+    setToQuery(tempQuery);
+
+    if (toCoord && tempCoord) {
+      handleCalculateRoute(toCoord, tempCoord);
+    }
+  };
+
+  const handleCopyTelemetry = () => {
+    navigator.clipboard.writeText(JSON.stringify(lastApiCall.response, null, 2));
+    setCopiedText(true);
+    setToastMessage("API response copied");
+    setTimeout(() => setCopiedText(false), 2000);
   };
 
   return (
-    <div className="min-h-screen bg-bg-base text-text-primary selection:bg-accent-purple/30 selection:text-white font-sans antialiased overflow-x-hidden">
+    <div className="relative h-screen w-screen overflow-hidden bg-bg-base font-sans antialiased text-text-primary select-none">
       {/* Toast Notification */}
       <Toast
         isOpen={Boolean(toastMessage)}
@@ -131,523 +314,368 @@ print(f"Distance: {route.distance} km | Duration: {route.duration} min")`,
         onClose={() => setToastMessage(null)}
       />
 
-      {/* --- Sticky Navigation --- */}
-      <header className="sticky top-0 z-40 w-full border-b border-border-subtle/80 bg-bg-base/80 backdrop-blur-md">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-          {/* Logo */}
-          <Link href="/" className="focus:outline-none">
-            <WaylineLogo size="md" showText={true} />
+      {/* --- 1. FULL-SCREEN INTERACTIVE MAP VIEWPORT --- */}
+      <div className="absolute inset-0 z-0">
+        <Map
+          center={mapCenter}
+          markerPosition={
+            activeMode === "search" && selectedLocation
+              ? [selectedLocation.lat, selectedLocation.lng]
+              : null
+          }
+          markerAddress={selectedLocation?.address}
+          fromPosition={fromCoord}
+          toPosition={toCoord}
+          fromAddress={fromAddress}
+          toAddress={toAddress}
+          polyline={routePoints}
+          onMapClick={handleMapClick}
+          showStreets={showStreets}
+        />
+      </div>
+
+      {/* --- 2. FLOATING TOP HEADER / NAVBAR --- */}
+      <header className="absolute top-4 left-4 right-4 z-20 pointer-events-none flex items-center justify-between">
+        {/* Left Brand Badge */}
+        <div className="pointer-events-auto flex items-center gap-3 bg-bg-surface/90 border border-border-default/80 backdrop-blur-md rounded-2xl px-4 py-2.5 shadow-lg">
+          <Link href="/" className="focus:outline-none flex items-center gap-2">
+            <WaylineLogo size="sm" showText={true} />
           </Link>
-
-          {/* Desktop Nav Links */}
-          <nav className="hidden md:flex items-center gap-8 text-sm font-medium text-text-secondary">
-            <a
-              href="#features"
-              className="hover:text-text-primary transition-colors select-none"
-            >
-              Capabilities
-            </a>
-            <a
-              href="#api"
-              className="hover:text-text-primary transition-colors select-none"
-            >
-              API Reference
-            </a>
-            <a
-              href="#telemetry"
-              className="hover:text-text-primary transition-colors select-none"
-            >
-              Architecture
-            </a>
-            <Link
-              href="/dashboard"
-              className="hover:text-accent-purple transition-colors select-none"
-            >
-              Dashboard
-            </Link>
-          </nav>
-
-          {/* Nav Right CTA */}
-          <div className="hidden md:flex items-center gap-3">
-            <Link
-              href="/login"
-              className="px-4 py-2 text-sm font-medium text-text-secondary hover:text-text-primary transition-colors select-none"
-            >
-              Sign In
-            </Link>
-            <Link href="/login">
-              <PremiumButton
-                variant="primary"
-                size="sm"
-                icon={<ArrowRight className="w-3.5 h-3.5" />}
-              >
-                Get Started
-              </PremiumButton>
-            </Link>
+          <div className="hidden sm:block h-4 w-[1px] bg-border-subtle" />
+          <div className="hidden sm:flex items-center gap-1.5 text-xs text-text-secondary font-medium">
+            <span className="w-2 h-2 rounded-full bg-status-success animate-pulse" />
+            <span>OSRM Engine Live</span>
           </div>
-
-          {/* Mobile Menu Button */}
-          <button
-            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            className="md:hidden p-2 text-text-secondary hover:text-text-primary focus:outline-none"
-            aria-label="Toggle Menu"
-          >
-            {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-          </button>
         </div>
 
-        {/* Mobile Dropdown Menu */}
-        {mobileMenuOpen && (
-          <div className="md:hidden border-b border-border-subtle bg-bg-surface px-4 py-4 space-y-3 animate-in slide-in-from-top-2 duration-150">
-            <a
-              href="#features"
-              onClick={() => setMobileMenuOpen(false)}
-              className="block py-2 text-sm font-medium text-text-secondary hover:text-text-primary"
-            >
-              Capabilities
-            </a>
-            <a
-              href="#api"
-              onClick={() => setMobileMenuOpen(false)}
-              className="block py-2 text-sm font-medium text-text-secondary hover:text-text-primary"
-            >
-              API Reference
-            </a>
-            <a
-              href="#telemetry"
-              onClick={() => setMobileMenuOpen(false)}
-              className="block py-2 text-sm font-medium text-text-secondary hover:text-text-primary"
-            >
-              Architecture
-            </a>
-            <Link
-              href="/dashboard"
-              onClick={() => setMobileMenuOpen(false)}
-              className="block py-2 text-sm font-medium text-accent-purple"
-            >
-              Dashboard
-            </Link>
-            <div className="pt-2 border-t border-border-subtle flex flex-col gap-2">
-              <Link href="/login" className="w-full">
-                <PremiumButton variant="secondary" size="md" className="w-full">
-                  Sign In
-                </PremiumButton>
-              </Link>
-              <Link href="/login" className="w-full">
-                <PremiumButton variant="primary" size="md" className="w-full">
-                  Get Started
-                </PremiumButton>
-              </Link>
-            </div>
-          </div>
-        )}
+        {/* Right Nav Links & Actions */}
+        <div className="pointer-events-auto flex items-center gap-2.5 bg-bg-surface/90 border border-border-default/80 backdrop-blur-md rounded-2xl p-1.5 shadow-lg">
+          <Link
+            href="/dashboard"
+            className="px-3 py-1.5 text-xs font-semibold text-text-secondary hover:text-text-primary rounded-xl hover:bg-bg-elevated transition-colors"
+          >
+            Dashboard
+          </Link>
+          <Link
+            href="/dashboard/keys"
+            className="hidden sm:block px-3 py-1.5 text-xs font-semibold text-text-secondary hover:text-text-primary rounded-xl hover:bg-bg-elevated transition-colors"
+          >
+            API Keys
+          </Link>
+          <Link href="/login">
+            <PremiumButton variant="primary" size="sm">
+              Sign In
+            </PremiumButton>
+          </Link>
+        </div>
       </header>
 
-      {/* --- HERO SECTION --- */}
-      <section className="relative pt-16 pb-20 md:pt-24 md:pb-28 overflow-hidden">
-        {/* Subtle Ambient Radial Lighting */}
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[700px] h-[350px] bg-accent-purple/10 blur-[130px] rounded-full pointer-events-none -z-10" />
-
-        {/* Abstract Grid Background Overlay */}
-        <div
-          className="absolute inset-0 bg-[linear-gradient(to_right,#1f243020_1px,transparent_1px),linear-gradient(to_bottom,#1f243020_1px,transparent_1px)] bg-[size:4rem_4rem] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_100%)] pointer-events-none -z-10"
-        />
-
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center space-y-8">
-          {/* Eyebrow Badge */}
-          <div className="inline-flex items-center animate-in fade-in duration-300">
-            <Badge variant="accent" size="md" icon={<Zap className="w-3.5 h-3.5" />}>
-              Wayline Engine v2.0 • Self-Hostable Spatial Infrastructure
-            </Badge>
+      {/* --- 3. FLOATING MAIN CONTROL ISLAND (LEFT PANEL) --- */}
+      <div className="absolute top-20 left-4 z-20 w-[calc(100%-2rem)] sm:w-96 flex flex-col gap-3 pointer-events-auto max-h-[calc(100vh-6.5rem)] overflow-y-auto">
+        <div className="bg-bg-surface/95 border border-border-default rounded-2xl shadow-2xl backdrop-blur-md p-4 sm:p-5 space-y-4">
+          {/* Mode Switcher: Search vs Directions */}
+          <div className="flex items-center bg-bg-base/80 p-1 rounded-xl border border-border-subtle text-xs font-semibold">
+            <button
+              onClick={() => setActiveMode("search")}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg transition-all ${
+                activeMode === "search"
+                  ? "bg-bg-surface text-text-primary shadow-sm border border-border-subtle"
+                  : "text-text-muted hover:text-text-secondary"
+              }`}
+            >
+              <Search className="w-3.5 h-3.5" />
+              <span>Search Location</span>
+            </button>
+            <button
+              onClick={() => setActiveMode("route")}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg transition-all ${
+                activeMode === "route"
+                  ? "bg-bg-surface text-accent-purple shadow-sm border border-border-subtle"
+                  : "text-text-muted hover:text-text-secondary"
+              }`}
+            >
+              <Navigation className="w-3.5 h-3.5" />
+              <span>Directions</span>
+            </button>
           </div>
 
-          {/* Hero Headline */}
-          <h1 className="text-4xl sm:text-6xl lg:text-7xl font-extrabold tracking-tight max-w-5xl mx-auto leading-[1.08]">
-            Geocoding & routing infrastructure{" "}
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-accent-purple via-[#34d399] to-accent-blue">
-              built for developers.
-            </span>
-          </h1>
-
-          {/* Supporting Paragraph */}
-          <p className="text-base sm:text-xl text-text-secondary max-w-2xl mx-auto leading-relaxed font-normal">
-            Sub-millisecond geocoding, turn-by-turn routing, and PostGIS-backed spatial analytics through resilient APIs. Fast, lightweight, and open.
-          </p>
-
-          {/* Hero CTA Buttons */}
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
-            <Link href="/login" className="w-full sm:w-auto">
-              <PremiumButton
-                variant="primary"
-                size="lg"
-                className="w-full sm:w-auto font-semibold"
-                icon={<ArrowRight className="w-4 h-4" />}
+          {/* TAB A: SEARCH LOCATION */}
+          {activeMode === "search" && (
+            <div className="space-y-3.5">
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  handleSearch();
+                }}
+                className="relative"
               >
-                Get Started Free
-              </PremiumButton>
-            </Link>
-            <a href="#playground" className="w-full sm:w-auto">
-              <PremiumButton
-                variant="secondary"
-                size="lg"
-                className="w-full sm:w-auto"
-                icon={<Terminal className="w-4 h-4" />}
-              >
-                Try Interactive Demo
-              </PremiumButton>
-            </a>
-          </div>
-
-          {/* --- Interactive Developer Console Widget --- */}
-          <div id="playground" className="pt-10 max-w-4xl mx-auto text-left">
-            <div className="bg-bg-surface border border-border-default rounded-2xl shadow-2xl overflow-hidden">
-              {/* Window Title Bar */}
-              <div className="px-4 py-3 bg-bg-elevated/60 border-b border-border-subtle flex items-center justify-between select-none">
-                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 rounded-full bg-status-error/70" />
-                  <div className="w-3 h-3 rounded-full bg-status-warning/70" />
-                  <div className="w-3 h-3 rounded-full bg-status-success/70" />
-                  <span className="ml-2 font-mono text-xs text-text-muted">
-                    wayline-interactive-console
-                  </span>
-                </div>
-
-                <div className="flex items-center gap-2 text-xs font-mono text-text-secondary">
-                  <span className="w-2 h-2 rounded-full bg-status-success animate-pulse" />
-                  <span>LATENCY: {demoResult.latency}ms</span>
-                </div>
-              </div>
-
-              {/* Interactive Search Bar inside Console */}
-              <div className="p-4 sm:p-6 border-b border-border-subtle bg-bg-base/40">
-                <form onSubmit={handleDemoSearch} className="flex flex-col sm:flex-row gap-2.5">
-                  <div className="relative flex-1">
-                    <Search className="absolute left-3.5 top-3.5 h-4 w-4 text-text-muted" />
-                    <input
-                      type="text"
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      placeholder="Enter city or coordinates (e.g., Chennai, Paris, 13.08, 80.27)"
-                      className="w-full rounded-xl bg-bg-surface border border-border-default py-2.5 pl-10 pr-4 text-sm text-text-primary placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-accent-purple/20 focus:border-accent-purple transition-all"
-                    />
-                  </div>
-                  <PremiumButton
-                    type="submit"
-                    variant="primary"
-                    size="md"
-                    loading={isSearching}
-                    icon={<Compass className="w-4 h-4" />}
-                  >
-                    Query Engine
-                  </PremiumButton>
-                </form>
-              </div>
-
-              {/* Live JSON Response Visualization */}
-              <div className="p-4 sm:p-6 font-mono text-xs sm:text-sm overflow-x-auto bg-bg-surface space-y-2">
-                <div className="text-text-muted">// HTTP 200 OK — Live Geocode & Routing Result</div>
-                <pre className="text-accent-purple/90 leading-relaxed select-all">
-{`{
-  "status": "success",
-  "query": "${searchQuery}",
-  "resolved_address": "${demoResult.address}",
-  "coordinates": {
-    "latitude": ${demoResult.lat.toFixed(4)},
-    "longitude": ${demoResult.lng.toFixed(4)}
-  },
-  "routing_capabilities": {
-    "engine": "OSRM / Contraction Hierarchies",
-    "turn_by_turn": true,
-    "vector_overlay": true
-  },
-  "execution_time_ms": ${demoResult.latency}
-}`}
-                </pre>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* --- CORE CAPABILITIES / FEATURE GRID --- */}
-      <section id="features" className="py-20 border-t border-border-subtle bg-bg-surface/30">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-12">
-          <div className="text-center max-w-3xl mx-auto space-y-3 select-none">
-            <Badge variant="accent" size="sm">
-              Engine Capabilities
-            </Badge>
-            <h2 className="text-3xl sm:text-4xl font-bold tracking-tight text-text-primary">
-              Engineered for speed, built for scale
-            </h2>
-            <p className="text-sm sm:text-base text-text-secondary">
-              Everything you need to power spatial search, routing calculation, and waypoint authorization.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {/* Card 1 */}
-            <div className="bg-bg-surface border border-border-subtle hover:border-border-default rounded-2xl p-6 transition-all duration-200 hover:-translate-y-[1px] space-y-4">
-              <div className="w-10 h-10 rounded-xl bg-accent-purple-muted border border-accent-purple/20 flex items-center justify-center text-accent-purple">
-                <Navigation className="w-5 h-5" />
-              </div>
-              <h3 className="text-base font-bold text-text-primary">Sub-10ms Routing</h3>
-              <p className="text-xs sm:text-sm text-text-secondary leading-relaxed">
-                High-performance OSRM graph routing algorithms computing distance, duration, and GeoJSON lines in single-digit milliseconds.
-              </p>
-            </div>
-
-            {/* Card 2 */}
-            <div className="bg-bg-surface border border-border-subtle hover:border-border-default rounded-2xl p-6 transition-all duration-200 hover:-translate-y-[1px] space-y-4">
-              <div className="w-10 h-10 rounded-xl bg-accent-blue/10 border border-accent-blue/20 flex items-center justify-center text-accent-blue">
-                <Compass className="w-5 h-5" />
-              </div>
-              <h3 className="text-base font-bold text-text-primary">Forward & Reverse Geocode</h3>
-              <p className="text-xs sm:text-sm text-text-secondary leading-relaxed">
-                Search locations by address query or resolve exact coordinates into structured street names and bounding boxes.
-              </p>
-            </div>
-
-            {/* Card 3 */}
-            <div className="bg-bg-surface border border-border-subtle hover:border-border-default rounded-2xl p-6 transition-all duration-200 hover:-translate-y-[1px] space-y-4">
-              <div className="w-10 h-10 rounded-xl bg-status-warning/10 border border-status-warning/20 flex items-center justify-center text-status-warning">
-                <Key className="w-5 h-5" />
-              </div>
-              <h3 className="text-base font-bold text-text-primary">Waypoint Key Governance</h3>
-              <p className="text-xs sm:text-sm text-text-secondary leading-relaxed">
-                SHA-256 hashed API keys with prefix tracking, dynamic usage metering, and one-click token revocation.
-              </p>
-            </div>
-
-            {/* Card 4 */}
-            <div className="bg-bg-surface border border-border-subtle hover:border-border-default rounded-2xl p-6 transition-all duration-200 hover:-translate-y-[1px] space-y-4">
-              <div className="w-10 h-10 rounded-xl bg-status-success/10 border border-status-success/20 flex items-center justify-center text-status-success">
-                <Server className="w-5 h-5" />
-              </div>
-              <h3 className="text-base font-bold text-text-primary">100% Self-Hostable</h3>
-              <p className="text-xs sm:text-sm text-text-secondary leading-relaxed">
-                Zero proprietary lock-in. Run your own mapping cluster anywhere via Docker Compose, PostGIS, and OpenStreetMap data.
-              </p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* --- DEVELOPER API & CODE INTEGRATION SECTION --- */}
-      <section id="api" className="py-20 border-t border-border-subtle bg-bg-base">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
-            {/* Left Copy */}
-            <div className="lg:col-span-5 space-y-6">
-              <Badge variant="accent" size="sm">
-                Developer Integration
-              </Badge>
-              <h2 className="text-3xl sm:text-4xl font-bold tracking-tight text-text-primary leading-tight">
-                Integrate geospatial routing in five lines of code
-              </h2>
-              <p className="text-sm sm:text-base text-text-secondary leading-relaxed">
-                Simple REST endpoints with standardized GeoJSON payloads. Authenticate with standard <code className="text-accent-purple font-mono text-xs bg-bg-elevated px-1.5 py-0.5 rounded">x-api-key</code> headers and enjoy predictable sub-millisecond execution.
-              </p>
-
-              <div className="space-y-3 pt-2">
-                <div className="flex items-center gap-3 text-sm text-text-secondary">
-                  <div className="p-1 rounded-md bg-status-success/10 text-status-success">
-                    <Check className="w-4 h-4" />
-                  </div>
-                  <span>Standards-compliant RFC 7946 GeoJSON outputs</span>
-                </div>
-                <div className="flex items-center gap-3 text-sm text-text-secondary">
-                  <div className="p-1 rounded-md bg-status-success/10 text-status-success">
-                    <Check className="w-4 h-4" />
-                  </div>
-                  <span>Instant waypoint authorization with SHA-256 tokens</span>
-                </div>
-                <div className="flex items-center gap-3 text-sm text-text-secondary">
-                  <div className="p-1 rounded-md bg-status-success/10 text-status-success">
-                    <Check className="w-4 h-4" />
-                  </div>
-                  <span>High-concurrency Node.js & OSRM worker pipeline</span>
-                </div>
-              </div>
-
-              <div className="pt-4">
-                <Link href="/dashboard/keys">
-                  <PremiumButton variant="secondary" size="md" icon={<Key className="w-4 h-4" />}>
-                    Manage API Keys
-                  </PremiumButton>
-                </Link>
-              </div>
-            </div>
-
-            {/* Right Tabbed Code Block */}
-            <div className="lg:col-span-7 bg-bg-surface border border-border-default rounded-2xl shadow-xl overflow-hidden">
-              {/* Tab Header */}
-              <div className="px-4 py-3 bg-bg-elevated border-b border-border-subtle flex items-center justify-between select-none">
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => setActiveCodeTab("curl")}
-                    className={`px-3 py-1 text-xs font-mono rounded-lg transition-colors ${
-                      activeCodeTab === "curl"
-                        ? "bg-bg-surface text-text-primary border border-border-subtle"
-                        : "text-text-muted hover:text-text-secondary"
-                    }`}
-                  >
-                    cURL
-                  </button>
-                  <button
-                    onClick={() => setActiveCodeTab("typescript")}
-                    className={`px-3 py-1 text-xs font-mono rounded-lg transition-colors ${
-                      activeCodeTab === "typescript"
-                        ? "bg-bg-surface text-text-primary border border-border-subtle"
-                        : "text-text-muted hover:text-text-secondary"
-                    }`}
-                  >
-                    TypeScript
-                  </button>
-                  <button
-                    onClick={() => setActiveCodeTab("python")}
-                    className={`px-3 py-1 text-xs font-mono rounded-lg transition-colors ${
-                      activeCodeTab === "python"
-                        ? "bg-bg-surface text-text-primary border border-border-subtle"
-                        : "text-text-muted hover:text-text-secondary"
-                    }`}
-                  >
-                    Python
-                  </button>
-                </div>
-
+                <Search className="absolute left-3.5 top-3 h-4 w-4 text-text-muted" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search city, address, or landmark..."
+                  className="w-full rounded-xl bg-bg-base border border-border-default py-2.5 pl-10 pr-20 text-xs sm:text-sm text-text-primary placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-accent-purple/20 focus:border-accent-purple transition-all"
+                />
                 <button
-                  onClick={handleCopyCode}
-                  className="flex items-center gap-1.5 text-xs text-text-muted hover:text-text-primary transition-colors p-1"
+                  type="submit"
+                  disabled={searchLoading}
+                  className="absolute right-1.5 top-1.5 px-3 py-1 bg-accent-purple text-btn-primary-text text-xs font-semibold rounded-lg hover:opacity-90 transition-opacity"
                 >
-                  {copiedSnippet ? (
-                    <>
-                      <Check className="w-3.5 h-3.5 text-status-success" />
-                      <span className="text-status-success font-medium">Copied</span>
-                    </>
-                  ) : (
-                    <>
-                      <Copy className="w-3.5 h-3.5" />
-                      <span>Copy</span>
-                    </>
-                  )}
+                  {searchLoading ? "..." : "Go"}
+                </button>
+              </form>
+
+              {/* Popular City Quick-Chips */}
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="text-[11px] text-text-muted">Popular:</span>
+                {["Chennai", "Paris", "London", "New York"].map((city) => (
+                  <button
+                    key={city}
+                    onClick={() => {
+                      setSearchQuery(city);
+                      handleSearch(city);
+                    }}
+                    className="text-[11px] font-medium px-2 py-0.5 rounded-md bg-bg-elevated hover:bg-bg-base border border-border-subtle text-text-secondary transition-colors"
+                  >
+                    {city}
+                  </button>
+                ))}
+              </div>
+
+              {/* Resolved Location Card */}
+              {selectedLocation && (
+                <div className="p-3.5 bg-bg-base/80 border border-border-subtle rounded-xl space-y-2.5 animate-in fade-in duration-150">
+                  <div className="flex items-start gap-2.5">
+                    <div className="p-1.5 rounded-lg bg-accent-purple-muted border border-accent-purple/20 text-accent-purple flex-shrink-0 mt-0.5">
+                      <MapPin className="w-4 h-4" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h4 className="text-xs font-bold text-text-primary line-clamp-2 leading-snug">
+                        {selectedLocation.address}
+                      </h4>
+                      <p className="text-[11px] font-mono text-text-muted mt-0.5">
+                        {selectedLocation.lat.toFixed(4)}° N, {selectedLocation.lng.toFixed(4)}° E
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between pt-1 border-t border-border-subtle/50 text-xs">
+                    {selectedLocation.latency && (
+                      <span className="inline-flex items-center gap-1 text-[11px] font-mono text-status-success font-semibold">
+                        <Zap className="w-3 h-3" /> {selectedLocation.latency}ms
+                      </span>
+                    )}
+
+                    <button
+                      onClick={() => {
+                        setFromCoord([selectedLocation.lat, selectedLocation.lng]);
+                        setFromAddress(selectedLocation.address);
+                        setFromQuery(selectedLocation.address);
+                        setActiveMode("route");
+                        setToastMessage("Set as Start location. Click map for destination.");
+                      }}
+                      className="inline-flex items-center gap-1 text-xs font-semibold text-accent-purple hover:underline"
+                    >
+                      <span>Route from here</span>
+                      <ArrowRight className="w-3 h-3" />
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* TAB B: DIRECTIONS & ROUTING */}
+          {activeMode === "route" && (
+            <div className="space-y-3">
+              {/* Origin / Destination Inputs */}
+              <div className="space-y-2 relative">
+                {/* From Input */}
+                <div className="flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full bg-status-success flex-shrink-0" />
+                  <input
+                    type="text"
+                    value={fromQuery}
+                    onChange={(e) => setFromQuery(e.target.value)}
+                    placeholder="Click map or type start point..."
+                    className="flex-1 rounded-xl bg-bg-base border border-border-default py-1.5 px-3 text-xs text-text-primary placeholder-text-muted focus:outline-none focus:border-accent-purple transition-all"
+                  />
+                </div>
+
+                {/* To Input */}
+                <div className="flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full bg-status-error flex-shrink-0" />
+                  <input
+                    type="text"
+                    value={toQuery}
+                    onChange={(e) => setToQuery(e.target.value)}
+                    placeholder="Click map or type destination..."
+                    className="flex-1 rounded-xl bg-bg-base border border-border-default py-1.5 px-3 text-xs text-text-primary placeholder-text-muted focus:outline-none focus:border-accent-purple transition-all"
+                  />
+                </div>
+
+                {/* Swap button */}
+                <button
+                  onClick={handleSwapDirections}
+                  title="Swap start & destination"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1 bg-bg-elevated hover:bg-bg-surface border border-border-subtle rounded-md text-text-muted hover:text-text-primary transition-colors"
+                >
+                  <ArrowUpDown className="w-3.5 h-3.5" />
                 </button>
               </div>
 
-              {/* Code Content */}
-              <div className="p-5 font-mono text-xs sm:text-sm text-text-primary overflow-x-auto bg-bg-base/90 leading-relaxed">
-                <pre className="text-text-secondary">
-                  <code>{codeSnippets[activeCodeTab]}</code>
-                </pre>
+              {/* Action Buttons */}
+              <div className="flex items-center gap-2 pt-1">
+                <PremiumButton
+                  variant="primary"
+                  size="sm"
+                  loading={routingLoading}
+                  onClick={() => handleCalculateRoute()}
+                  className="flex-1"
+                  icon={<Navigation className="w-3.5 h-3.5" />}
+                >
+                  Calculate Route
+                </PremiumButton>
+
+                {(fromCoord || toCoord || routePoints.length > 0) && (
+                  <button
+                    onClick={handleClearRoute}
+                    title="Reset points"
+                    className="p-2 bg-bg-elevated hover:bg-status-error/10 hover:text-status-error border border-border-subtle rounded-xl text-text-muted transition-colors text-xs flex items-center justify-center"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                  </button>
+                )}
               </div>
+
+              {routingError && (
+                <div className="p-2.5 bg-status-error/10 border border-status-error/20 text-status-error rounded-xl text-xs font-medium">
+                  {routingError}
+                </div>
+              )}
+
+              {/* Interactive Clicking Helper Note */}
+              {!routeStats && !routingError && (
+                <div className="p-2.5 bg-bg-elevated/50 border border-border-subtle rounded-xl text-[11px] text-text-muted flex items-center gap-2">
+                  <Compass className="w-4 h-4 text-accent-purple flex-shrink-0" />
+                  <span>
+                    Tip: Click directly on the map to set <strong>Start (1st click)</strong> and{" "}
+                    <strong>Destination (2nd click)</strong>.
+                  </span>
+                </div>
+              )}
+
+              {/* Calculated Route Results Card */}
+              {routeStats && (
+                <div className="p-3.5 bg-bg-base/90 border border-border-subtle rounded-xl space-y-2 animate-in slide-in-from-bottom-2 duration-150">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-lg font-bold text-text-primary">
+                        {routeStats.durationMin} mins
+                      </div>
+                      <div className="text-xs text-text-secondary font-medium">
+                        {routeStats.distanceKm} km driving distance
+                      </div>
+                    </div>
+
+                    <Badge variant="success" size="sm">
+                      FASTEST ROUTE
+                    </Badge>
+                  </div>
+
+                  <div className="pt-2 border-t border-border-subtle/50 flex items-center justify-between text-[11px] font-mono text-text-muted">
+                    <span>Engine: OSRM Graph</span>
+                    {routeStats.latency && (
+                      <span className="text-status-success font-semibold">
+                        ⚡ {routeStats.latency}ms
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
+          )}
+
+          {/* Street Overlay Toggle */}
+          <div className="pt-2 border-t border-border-subtle flex items-center justify-between text-xs text-text-secondary">
+            <span className="flex items-center gap-1.5">
+              <Layers className="w-3.5 h-3.5 text-text-muted" />
+              <span>Street Grid Overlay</span>
+            </span>
+            <button
+              onClick={() => setShowStreets(!showStreets)}
+              className={`px-2 py-0.5 rounded-md text-[11px] font-semibold border transition-colors ${
+                showStreets
+                  ? "bg-accent-purple text-btn-primary-text border-transparent"
+                  : "bg-bg-elevated text-text-muted border-border-subtle hover:text-text-primary"
+              }`}
+            >
+              {showStreets ? "ON" : "OFF"}
+            </button>
           </div>
         </div>
-      </section>
+      </div>
 
-      {/* --- TELEMETRY & ARCHITECTURE SECTION --- */}
-      <section id="telemetry" className="py-20 border-t border-border-subtle bg-bg-surface/20">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-12">
-          <div className="text-center max-w-2xl mx-auto space-y-2 select-none">
-            <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-text-primary">
-              Built for resilient production workloads
-            </h2>
-            <p className="text-xs sm:text-sm text-text-secondary">
-              Designed from first principles to deliver uncompromised throughput without proprietary lock-in.
-            </p>
-          </div>
+      {/* --- 4. FLOATING BOTTOM DEVELOPER API INSPECTOR PILL --- */}
+      <div className="absolute bottom-4 left-4 z-20 pointer-events-auto">
+        <button
+          onClick={() => setShowApiInspector(!showApiInspector)}
+          className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-mono font-semibold border shadow-lg backdrop-blur-md transition-all ${
+            showApiInspector
+              ? "bg-accent-purple text-btn-primary-text border-accent-purple shadow-accent-purple/20"
+              : "bg-bg-surface/90 text-text-secondary hover:text-text-primary border-border-default hover:bg-bg-elevated"
+          }`}
+        >
+          <Code2 className="w-3.5 h-3.5" />
+          <span>API Inspector</span>
+          <span className="text-[10px] px-1.5 py-0.2 rounded bg-black/20 text-current font-bold">
+            {lastApiCall.latencyMs}ms
+          </span>
+        </button>
+      </div>
 
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6">
-            <div className="p-6 bg-bg-surface border border-border-subtle rounded-2xl text-center space-y-1">
-              <div className="text-3xl sm:text-4xl font-extrabold text-accent-purple tracking-tight">
-                &lt; 18ms
-              </div>
-              <div className="text-xs font-semibold text-text-primary">P99 Route Latency</div>
-              <div className="text-[11px] text-text-muted">OSRM multi-level Dijkstra</div>
+      {/* --- 5. COLLAPSIBLE API INSPECTOR DRAWER --- */}
+      {showApiInspector && (
+        <div className="absolute bottom-16 left-4 right-4 sm:right-auto sm:w-[480px] z-30 bg-bg-surface border border-border-default rounded-2xl shadow-2xl p-4 space-y-3 backdrop-blur-md animate-in slide-in-from-bottom-4 duration-200">
+          <div className="flex items-center justify-between select-none">
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-status-success" />
+              <span className="text-xs font-mono font-bold text-text-primary">
+                {lastApiCall.endpoint}
+              </span>
             </div>
-
-            <div className="p-6 bg-bg-surface border border-border-subtle rounded-2xl text-center space-y-1">
-              <div className="text-3xl sm:text-4xl font-extrabold text-status-success tracking-tight">
-                99.99%
-              </div>
-              <div className="text-xs font-semibold text-text-primary">Engine Availability</div>
-              <div className="text-[11px] text-text-muted">Self-healing containers</div>
-            </div>
-
-            <div className="p-6 bg-bg-surface border border-border-subtle rounded-2xl text-center space-y-1">
-              <div className="text-3xl sm:text-4xl font-extrabold text-accent-blue tracking-tight">
-                100%
-              </div>
-              <div className="text-xs font-semibold text-text-primary">OpenStreetMap Data</div>
-              <div className="text-[11px] text-text-muted">No per-tile billing surcharges</div>
-            </div>
-
-            <div className="p-6 bg-bg-surface border border-border-subtle rounded-2xl text-center space-y-1">
-              <div className="text-3xl sm:text-4xl font-extrabold text-text-primary tracking-tight">
-                0
-              </div>
-              <div className="text-xs font-semibold text-text-primary">Vendor Lock-In</div>
-              <div className="text-[11px] text-text-muted">Deploy anywhere in minutes</div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* --- BOTTOM CTA --- */}
-      <section className="py-20 border-t border-border-subtle bg-bg-base relative overflow-hidden">
-        <div className="absolute inset-0 bg-accent-purple/5 pointer-events-none -z-10" />
-
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 text-center space-y-6">
-          <WaylineLogo size="lg" showText={false} className="mx-auto" />
-
-          <h2 className="text-3xl sm:text-5xl font-extrabold tracking-tight text-text-primary">
-            Start building with Wayline today
-          </h2>
-          <p className="text-sm sm:text-base text-text-secondary max-w-xl mx-auto leading-relaxed">
-            Generate your waypoint API key and integrate production routing, geocoding, and map rendering in minutes.
-          </p>
-
-          <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3">
-            <Link href="/login" className="w-full sm:w-auto">
-              <PremiumButton
-                variant="primary"
-                size="lg"
-                icon={<ArrowRight className="w-4 h-4" />}
-                className="w-full sm:w-auto font-semibold"
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleCopyTelemetry}
+                title="Copy JSON response"
+                className="p-1 text-text-muted hover:text-text-primary rounded"
               >
-                Create Account & Key
-              </PremiumButton>
-            </Link>
-            <Link href="/dashboard" className="w-full sm:w-auto">
-              <PremiumButton variant="secondary" size="lg" className="w-full sm:w-auto">
-                Open Dashboard
-              </PremiumButton>
-            </Link>
+                {copiedText ? (
+                  <Check className="w-3.5 h-3.5 text-status-success" />
+                ) : (
+                  <Copy className="w-3.5 h-3.5" />
+                )}
+              </button>
+              <button
+                onClick={() => setShowApiInspector(false)}
+                className="p-1 text-text-muted hover:text-text-primary rounded"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+
+          <div className="p-3 bg-bg-base rounded-xl font-mono text-[11px] text-accent-purple/90 overflow-x-auto max-h-48 border border-border-subtle select-all">
+            <pre>{JSON.stringify(lastApiCall.response, null, 2)}</pre>
+          </div>
+
+          <div className="flex items-center justify-between text-[11px] text-text-muted font-mono pt-1">
+            <span>Status: {lastApiCall.status} OK</span>
+            <span>Latency: {lastApiCall.latencyMs} ms</span>
           </div>
         </div>
-      </section>
-
-      {/* --- MINIMALIST DEVELOPER FOOTER --- */}
-      <footer className="border-t border-border-subtle bg-bg-surface py-12">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-6">
-          <WaylineLogo size="sm" showText={true} showTagline={true} />
-
-          <div className="flex items-center gap-6 text-xs text-text-muted">
-            <Link href="/dashboard" className="hover:text-text-primary transition-colors">
-              Dashboard
-            </Link>
-            <Link href="/dashboard/keys" className="hover:text-text-primary transition-colors">
-              API Keys
-            </Link>
-            <Link href="/login" className="hover:text-text-primary transition-colors">
-              Login
-            </Link>
-          </div>
-
-          <div className="text-xs text-text-muted select-none">
-            © {new Date().getFullYear()} Wayline Geospatial. OpenStreetMap & OSRM native.
-          </div>
-        </div>
-      </footer>
+      )}
     </div>
   );
 }

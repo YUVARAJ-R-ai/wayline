@@ -236,7 +236,7 @@ export default function Map({
 
       {/* Polyline Route */}
       {polyline && polyline.length > 0 && (
-        <Polyline positions={polyline} color="#3b82f6" weight={4} />
+        <Polyline positions={polyline} color="#10b981" weight={5} opacity={0.9} />
       )}
     </MapContainer>
   );
