@@ -93,9 +93,7 @@ export default function WaylineLogo({
           width="312"
           height="142"
           rx="24"
-          fill={variant === "app-icon-light" ? "#F6F4EB" : "#0B0F0D"}
-          stroke={variant === "app-icon-light" ? "#DAD7C7" : "#1F2A1F"}
-          strokeWidth="3"
+          fill="transparent"
         />
       )}
 

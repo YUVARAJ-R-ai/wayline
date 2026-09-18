@@ -66,7 +66,7 @@ export default function DashboardLayout({
           
           {/* Logo container */}
           <Link href="/" className="hover:opacity-90 transition-all p-1" title="Wayline Home">
-            <WaylineLogo size="sm" showText={false} variant="app-icon-dark" />
+            <WaylineLogo size="sm" showText={false} variant="default" />
           </Link>
 
           {/* Navigation Items */}
