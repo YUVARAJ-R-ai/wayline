@@ -186,10 +186,10 @@ func main() {
       </section>
 
       {/* --- 3. DEVELOPER PREVIEW / INTERACTIVE ARCHITECTURE SHOWCASE --- */}
-      <section className="relative mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 pb-20">
-        <div className="rounded-3xl border border-border-default bg-bg-surface shadow-2xl overflow-hidden backdrop-blur-md">
+      <section className="relative z-10 mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 pb-20">
+        <div className="rounded-3xl border border-border-default bg-bg-surface shadow-2xl overflow-hidden">
           {/* Terminal Window Header */}
-          <div className="flex items-center justify-between border-b border-border-subtle bg-bg-base/80 px-5 py-3.5">
+          <div className="flex items-center justify-between border-b border-border-subtle bg-bg-base px-5 py-3.5">
             <div className="flex items-center gap-2">
               <div className="w-2.5 h-2.5 rounded-full bg-status-error/80" />
               <div className="w-2.5 h-2.5 rounded-full bg-status-warning/80" />
@@ -362,7 +362,7 @@ func main() {
       </section>
 
       {/* --- 4. CORE CAPABILITIES (4 HIGH CRAFT CARDS) --- */}
-      <section id="capabilities" className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-16">
+      <section id="capabilities" className="relative z-10 mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-16">
         <div className="text-center max-w-2xl mx-auto mb-12 space-y-3">
           <Badge variant="neutral" size="sm">
             Core Engine Capabilities
@@ -377,7 +377,7 @@ func main() {
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           {/* Card 1 */}
-          <div className="rounded-2xl border border-border-default bg-bg-surface p-6 space-y-3 hover:border-border-strong transition-all hover:shadow-lg">
+          <div className="rounded-2xl border border-border-default bg-bg-surface p-6 space-y-3 hover:border-border-strong transition-all hover:shadow-lg shadow-sm">
             <div className="w-10 h-10 rounded-xl bg-accent-purple/10 border border-accent-purple/20 flex items-center justify-center text-accent-purple">
               <Zap className="w-5 h-5" />
             </div>
@@ -388,7 +388,7 @@ func main() {
           </div>
 
           {/* Card 2 */}
-          <div className="rounded-2xl border border-border-default bg-bg-surface p-6 space-y-3 hover:border-border-strong transition-all hover:shadow-lg">
+          <div className="rounded-2xl border border-border-default bg-bg-surface p-6 space-y-3 hover:border-border-strong transition-all hover:shadow-lg shadow-sm">
             <div className="w-10 h-10 rounded-xl bg-accent-purple/10 border border-accent-purple/20 flex items-center justify-center text-accent-purple">
               <Compass className="w-5 h-5" />
             </div>
@@ -399,7 +399,7 @@ func main() {
           </div>
 
           {/* Card 3 */}
-          <div className="rounded-2xl border border-border-default bg-bg-surface p-6 space-y-3 hover:border-border-strong transition-all hover:shadow-lg">
+          <div className="rounded-2xl border border-border-default bg-bg-surface p-6 space-y-3 hover:border-border-strong transition-all hover:shadow-lg shadow-sm">
             <div className="w-10 h-10 rounded-xl bg-accent-purple/10 border border-accent-purple/20 flex items-center justify-center text-accent-purple">
               <Server className="w-5 h-5" />
             </div>
@@ -410,7 +410,7 @@ func main() {
           </div>
 
           {/* Card 4 */}
-          <div className="rounded-2xl border border-border-default bg-bg-surface p-6 space-y-3 hover:border-border-strong transition-all hover:shadow-lg">
+          <div className="rounded-2xl border border-border-default bg-bg-surface p-6 space-y-3 hover:border-border-strong transition-all hover:shadow-lg shadow-sm">
             <div className="w-10 h-10 rounded-xl bg-accent-purple/10 border border-accent-purple/20 flex items-center justify-center text-accent-purple">
               <Shield className="w-5 h-5" />
             </div>
@@ -423,7 +423,7 @@ func main() {
       </section>
 
       {/* --- 5. DEVELOPER CODE / SDK SECTION --- */}
-      <section id="api" className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-14">
+      <section id="api" className="relative z-10 mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-14">
         <div className="rounded-3xl border border-border-default bg-bg-surface p-6 sm:p-8 shadow-xl">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-border-subtle pb-5">
             <div>
@@ -439,7 +439,7 @@ func main() {
                 onClick={() => setActiveCodeTab("curl")}
                 className={`px-3 py-1 rounded-lg transition-colors ${
                   activeCodeTab === "curl"
-                    ? "bg-bg-elevated text-text-primary border border-border-subtle"
+                    ? "bg-bg-elevated text-text-primary border border-border-subtle shadow-sm"
                     : "text-text-muted hover:text-text-secondary"
                 }`}
               >
@@ -449,7 +449,7 @@ func main() {
                 onClick={() => setActiveCodeTab("typescript")}
                 className={`px-3 py-1 rounded-lg transition-colors ${
                   activeCodeTab === "typescript"
-                    ? "bg-bg-elevated text-text-primary border border-border-subtle"
+                    ? "bg-bg-elevated text-text-primary border border-border-subtle shadow-sm"
                     : "text-text-muted hover:text-text-secondary"
                 }`}
               >
@@ -459,7 +459,7 @@ func main() {
                 onClick={() => setActiveCodeTab("python")}
                 className={`px-3 py-1 rounded-lg transition-colors ${
                   activeCodeTab === "python"
-                    ? "bg-bg-elevated text-text-primary border border-border-subtle"
+                    ? "bg-bg-elevated text-text-primary border border-border-subtle shadow-sm"
                     : "text-text-muted hover:text-text-secondary"
                 }`}
               >
@@ -469,7 +469,7 @@ func main() {
                 onClick={() => setActiveCodeTab("go")}
                 className={`px-3 py-1 rounded-lg transition-colors ${
                   activeCodeTab === "go"
-                    ? "bg-bg-elevated text-text-primary border border-border-subtle"
+                    ? "bg-bg-elevated text-text-primary border border-border-subtle shadow-sm"
                     : "text-text-muted hover:text-text-secondary"
                 }`}
               >
@@ -482,7 +482,7 @@ func main() {
           <div className="mt-5 relative rounded-2xl bg-bg-base border border-border-subtle p-4 sm:p-5 font-mono text-xs text-text-primary overflow-x-auto">
             <button
               onClick={() => copyToClipboard(sampleCodes[activeCodeTab], activeCodeTab)}
-              className="absolute right-4 top-4 p-1.5 rounded-lg bg-bg-elevated hover:bg-bg-surface text-text-muted hover:text-text-primary border border-border-subtle transition-colors"
+              className="absolute right-4 top-4 p-1.5 rounded-lg bg-bg-elevated hover:bg-bg-surface text-text-muted hover:text-text-primary border border-border-subtle transition-colors shadow-sm"
               title="Copy code"
             >
               {copiedCode === activeCodeTab ? (
@@ -499,7 +499,7 @@ func main() {
       </section>
 
       {/* --- 6. ARCHITECTURE BENCHMARK STATS --- */}
-      <section id="architecture" className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-14 border-t border-border-subtle">
+      <section id="architecture" className="relative z-10 mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-14 border-t border-border-subtle bg-bg-surface/80">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-6 text-center">
           <div className="space-y-1">
             <div className="text-3xl font-extrabold text-accent-purple font-mono">&lt; 10ms</div>
@@ -521,7 +521,7 @@ func main() {
       </section>
 
       {/* --- 7. BOTTOM CALL TO ACTION --- */}
-      <section className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-16">
+      <section className="relative z-10 mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-16">
         <div className="rounded-3xl border border-border-default bg-bg-surface p-8 sm:p-12 text-center relative overflow-hidden shadow-2xl">
           <div className="max-w-2xl mx-auto space-y-5 relative z-10">
             <h2 className="text-2xl sm:text-4xl font-extrabold text-text-primary tracking-tight">
@@ -547,7 +547,7 @@ func main() {
       </section>
 
       {/* --- BRAND SUB-CONCEPTS STRIP --- */}
-      <section className="border-y border-border-subtle bg-bg-surface/50 py-5">
+      <section className="relative z-10 border-y border-border-subtle bg-bg-surface py-5">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 flex flex-wrap items-center justify-around gap-6 text-xs font-mono font-semibold tracking-widest text-brand-stone uppercase select-none">
           <span>Geocoding</span>
           <span className="text-border-strong">·</span>
@@ -560,7 +560,7 @@ func main() {
       </section>
 
       {/* --- 8. MINIMALIST BRAND FOOTER --- */}
-      <footer className="border-t border-border-subtle bg-bg-base py-12 text-xs text-text-muted">
+      <footer className="relative z-10 border-t border-border-subtle bg-bg-base py-12 text-xs text-text-muted">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 space-y-6">
           {/* Top row */}
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pb-6 border-b border-border-subtle/60">

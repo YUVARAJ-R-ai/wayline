@@ -76,9 +76,9 @@
   --shadow-glass: 0 8px 32px 0 rgba(11, 15, 13, 0.06);
 
   /* Dot Grid & Cursor Sensitivity (Light Theme) */
-  --dot-base-color: rgba(67, 99, 82, 0.20);
-  --dot-active-color: rgba(31, 42, 31, 0.45);
-  --cursor-glow-color: rgba(67, 99, 82, 0.08);
+  --dot-base-color: rgba(67, 99, 82, 0.14);
+  --dot-active-color: rgba(31, 42, 31, 0.32);
+  --cursor-glow-color: rgba(67, 99, 82, 0.05);
 
   /* Button Components */
   --btn-signin-bg: var(--brand-sage);
@@ -113,9 +113,9 @@
   --status-error: #B84343;    /* Red error */
 
   /* Dot Grid & Cursor Sensitivity (Dark Theme) */
-  --dot-base-color: rgba(139, 155, 137, 0.17);
-  --dot-active-color: rgba(218, 215, 199, 0.48);
-  --cursor-glow-color: rgba(67, 99, 82, 0.14);
+  --dot-base-color: rgba(139, 155, 137, 0.12);
+  --dot-active-color: rgba(218, 215, 199, 0.35);
+  --cursor-glow-color: rgba(67, 99, 82, 0.08);
 
   /* Button Components overrides */
   --btn-signin-bg: #436352;
