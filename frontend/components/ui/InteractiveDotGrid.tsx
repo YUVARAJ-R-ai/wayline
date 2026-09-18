@@ -8,7 +8,8 @@ export default function InteractiveDotGrid() {
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
-      setMousePos({ x: e.clientX, y: e.clientY });
+      // Use pageX / pageY so the spotlight moves with document scroll
+      setMousePos({ x: e.pageX, y: e.pageY });
       if (!isVisible) setIsVisible(true);
     };
 
@@ -26,25 +27,25 @@ export default function InteractiveDotGrid() {
   }, [isVisible]);
 
   return (
-    <div className="pointer-events-none fixed inset-0 z-0 overflow-hidden select-none">
-      {/* 1. Ultra-Subtle Ambient Micro-Dot Grid */}
+    <div className="pointer-events-none absolute inset-0 z-0 overflow-hidden select-none w-full min-h-full">
+      {/* 1. Ambient Micro-Dot Grid (Scrolls naturally with the page) */}
       <div
-        className="absolute inset-0 [background-size:24px_24px] opacity-75 transition-opacity duration-300"
+        className="absolute inset-0 [background-size:24px_24px] opacity-90 transition-opacity duration-300"
         style={{
           backgroundImage:
-            "radial-gradient(var(--dot-base-color, rgba(139, 155, 137, 0.09)) 1px, transparent 1px)",
+            "radial-gradient(var(--dot-base-color, rgba(139, 155, 137, 0.17)) 1.15px, transparent 1.15px)",
         }}
       />
 
-      {/* 2. Soft Cursor-Sensitive Interactive Highlight */}
+      {/* 2. Cursor-Sensitive Spotlight (Intensifies dots as cursor moves) */}
       {mousePos && isVisible && (
         <div
-          className="absolute inset-0 [background-size:24px_24px] transition-opacity duration-200"
+          className="absolute inset-0 [background-size:24px_24px] transition-opacity duration-150"
           style={{
             backgroundImage:
-              "radial-gradient(var(--dot-active-color, rgba(139, 155, 137, 0.26)) 1.2px, transparent 1.2px)",
-            maskImage: `radial-gradient(320px circle at ${mousePos.x}px ${mousePos.y}px, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.2) 50%, transparent 100%)`,
-            WebkitMaskImage: `radial-gradient(320px circle at ${mousePos.x}px ${mousePos.y}px, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.2) 50%, transparent 100%)`,
+              "radial-gradient(var(--dot-active-color, rgba(218, 215, 199, 0.48)) 1.4px, transparent 1.4px)",
+            maskImage: `radial-gradient(350px circle at ${mousePos.x}px ${mousePos.y}px, rgba(0,0,0,0.95) 0%, rgba(0,0,0,0.3) 45%, transparent 100%)`,
+            WebkitMaskImage: `radial-gradient(350px circle at ${mousePos.x}px ${mousePos.y}px, rgba(0,0,0,0.95) 0%, rgba(0,0,0,0.3) 45%, transparent 100%)`,
           }}
         />
       )}
@@ -52,14 +53,14 @@ export default function InteractiveDotGrid() {
       {/* 3. Subtle Ambient Light Halo around Cursor */}
       {mousePos && isVisible && (
         <div
-          className="absolute pointer-events-none -translate-x-1/2 -translate-y-1/2 rounded-full blur-3xl transition-opacity duration-300"
+          className="absolute pointer-events-none -translate-x-1/2 -translate-y-1/2 rounded-full blur-3xl transition-opacity duration-200"
           style={{
             left: `${mousePos.x}px`,
             top: `${mousePos.y}px`,
-            width: "300px",
-            height: "300px",
+            width: "320px",
+            height: "320px",
             background:
-              "radial-gradient(circle, var(--cursor-glow-color, rgba(67, 99, 82, 0.08)) 0%, transparent 70%)",
+              "radial-gradient(circle, var(--cursor-glow-color, rgba(67, 99, 82, 0.14)) 0%, transparent 70%)",
           }}
         />
       )}
