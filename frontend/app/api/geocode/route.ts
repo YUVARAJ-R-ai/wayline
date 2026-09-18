@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { recordKeyUsage } from "../keys/route";
+import { recordKeyUsage } from "@/lib/apiKeyStore";
 
 const MOCK_LOCATIONS: Record<string, { lat: number; lng: number; address: string }> = {
   london: { lat: 51.5074, lng: -0.1278, address: "London, United Kingdom" },

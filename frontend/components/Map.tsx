@@ -181,8 +181,8 @@ export default function Map({
     }
   }, [toPosition, toAddress]);
 
-  const greenIcon = createCustomIcon('#2e7d56'); // status-success
-  const redIcon = createCustomIcon('#b83a3a');   // status-error
+  const sageIcon = createCustomIcon('#436352'); // Brand Sage
+  const redIcon = createCustomIcon('#B84343');   // Status Error Red
 
   return (
     <MapContainer 
@@ -205,7 +205,7 @@ export default function Map({
       
       {/* Search landing marker */}
       {markerPosition && !fromPosition && !toPosition && (
-        <Marker position={markerPosition} ref={markerRef}>
+        <Marker position={markerPosition} icon={sageIcon} ref={markerRef}>
           {markerAddress && (
             <Popup>
               {markerAddress}
@@ -214,17 +214,17 @@ export default function Map({
         </Marker>
       )}
 
-      {/* From marker (green) */}
+      {/* From marker (Sage) */}
       {fromPosition && (
-        <Marker position={fromPosition} icon={greenIcon} ref={fromMarkerRef}>
+        <Marker position={fromPosition} icon={sageIcon} ref={fromMarkerRef}>
           <Popup>
-            <span className="font-bold text-status-success">Start</span>
+            <span className="font-bold text-accent-purple">Start</span>
             {fromAddress && <div className="text-xs text-text-secondary mt-1">{fromAddress}</div>}
           </Popup>
         </Marker>
       )}
 
-      {/* To marker (red) */}
+      {/* To marker (Red) */}
       {toPosition && (
         <Marker position={toPosition} icon={redIcon} ref={toMarkerRef}>
           <Popup>
@@ -234,9 +234,12 @@ export default function Map({
         </Marker>
       )}
 
-      {/* Polyline Route */}
+      {/* Polyline Route with Crisp Brand Layering */}
       {polyline && polyline.length > 0 && (
-        <Polyline positions={polyline} color="#10b981" weight={5} opacity={0.9} />
+        <>
+          <Polyline positions={polyline} color="#1F2A1F" weight={7} opacity={0.8} />
+          <Polyline positions={polyline} color="#436352" weight={4} opacity={1} />
+        </>
       )}
     </MapContainer>
   );

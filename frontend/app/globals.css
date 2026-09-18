@@ -39,6 +39,14 @@
   --color-btn-signin-hover: var(--btn-signin-hover);
   --color-btn-primary-text: var(--btn-primary-text);
 
+  /* Brand Palette (Exact Hex from Brand Guidelines) */
+  --color-brand-charcoal: var(--brand-charcoal);
+  --color-brand-olive: var(--brand-olive);
+  --color-brand-sage: var(--brand-sage);
+  --color-brand-stone: var(--brand-stone);
+  --color-brand-sand: var(--brand-sand);
+  --color-brand-ivory: var(--brand-ivory);
+
   /* Shadows */
   --shadow-sm: var(--shadow-sm);
   --shadow-md: var(--shadow-md);
@@ -51,6 +59,7 @@
   --radius-lg: var(--radius-lg);
   --radius-xl: var(--radius-xl);
   --radius-2xl: var(--radius-2xl);
+  --radius-3xl: var(--radius-3xl);
 
   /* Font Families */
   --font-sans: var(--font-sans);

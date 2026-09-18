@@ -1,0 +1,44 @@
+<svg width="160" height="130" viewBox="0 0 160 130" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="ribbonLeft" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#DAD7C7" />
+      <stop offset="40%" stop-color="#8B9B89" />
+      <stop offset="100%" stop-color="#436352" />
+    </linearGradient>
+    <linearGradient id="ribbonFold" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#1F2A1F" />
+      <stop offset="60%" stop-color="#2A3C2D" />
+      <stop offset="100%" stop-color="#436352" />
+    </linearGradient>
+    <linearGradient id="ribbonRight" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#8B9B89" />
+      <stop offset="35%" stop-color="#436352" />
+      <stop offset="100%" stop-color="#1F2A1F" />
+    </linearGradient>
+    <linearGradient id="starGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#F6F4EB" />
+      <stop offset="60%" stop-color="#DAD7C7" />
+      <stop offset="100%" stop-color="#8B9B89" />
+    </linearGradient>
+  </defs>
+  <!-- Left Arm -->
+  <path d="M 22 36 L 40 30 L 64 84 L 46 90 Z" fill="url(#ribbonLeft)" />
+  <path d="M 31 33 L 55 87" stroke="#DAD7C7" stroke-width="1" stroke-opacity="0.5" stroke-dasharray="2 2" />
+  <!-- Fold -->
+  <path d="M 46 90 C 54 96, 68 94, 76 78 L 88 56 L 72 52 L 60 76 C 56 82, 50 86, 46 90 Z" fill="url(#ribbonFold)" />
+  <!-- Right Arch -->
+  <path d="M 72 52 L 88 56 L 112 30 C 118 24, 126 28, 130 36 L 148 88 L 132 94 L 118 48 C 116 42, 110 40, 106 44 L 88 64 Z" fill="url(#ribbonRight)" />
+  <!-- Spine -->
+  <path d="M 78 60 Q 96 52, 118 36" stroke="#DAD7C7" stroke-width="2.5" stroke-linecap="round" stroke-opacity="0.85" />
+  <!-- Waypoint Node -->
+  <g transform="translate(118, 36)">
+    <circle cx="0" cy="0" r="8" fill="#1F2A1F" stroke="#DAD7C7" stroke-width="2.5" />
+    <circle cx="0" cy="0" r="3.5" fill="#F6F4EB" />
+  </g>
+  <!-- Compass Star -->
+  <g transform="translate(142, 22)">
+    <polygon points="0,-14 2.5,-3 14,0 2.5,3 0,14 -2.5,3 -14,0 -2.5,-3" fill="url(#starGrad)" />
+    <polygon points="0,-7 1.5,-1.5 7,0 1.5,1.5 0,7 -1.5,1.5 -7,0 -1.5,-1.5" fill="#DAD7C7" opacity="0.75" transform="rotate(45)" />
+    <circle cx="0" cy="0" r="1.5" fill="#FFFFFF" />
+  </g>
+</svg>

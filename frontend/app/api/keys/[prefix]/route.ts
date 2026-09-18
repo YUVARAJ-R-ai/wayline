@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { deleteDevKey } from "@/lib/apiKeyStore";
 
 export async function DELETE(
   req: NextRequest,
@@ -15,6 +16,7 @@ export async function DELETE(
         headers: { ...(authHeader ? { Authorization: authHeader } : {}) },
       });
       if (res.ok) {
+        deleteDevKey(prefix);
         return NextResponse.json({ message: "API key deleted successfully." });
       }
     } catch (err) {
@@ -22,5 +24,6 @@ export async function DELETE(
     }
   }
 
+  deleteDevKey(prefix);
   return NextResponse.json({ message: "API key deleted successfully." });
 }

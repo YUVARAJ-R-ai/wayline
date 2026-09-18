@@ -6,6 +6,7 @@ export interface WaylineLogoProps {
   size?: "sm" | "md" | "lg" | "xl";
   showText?: boolean;
   showTagline?: boolean;
+  variant?: "default" | "app-icon-dark" | "app-icon-light";
   className?: string;
 }
 
@@ -13,129 +14,193 @@ export default function WaylineLogo({
   size = "md",
   showText = true,
   showTagline = false,
+  variant = "default",
   className = "",
 }: WaylineLogoProps) {
   const iconDimensions = {
-    sm: { w: 24, h: 24, text: "text-base", sub: "text-[9px]" },
-    md: { w: 32, h: 32, text: "text-xl", sub: "text-[10px]" },
-    lg: { w: 48, h: 48, text: "text-2xl", sub: "text-xs" },
-    xl: { w: 72, h: 72, text: "text-4xl", sub: "text-sm" },
+    sm: { w: 28, h: 28, text: "text-base", sub: "text-[8px]" },
+    md: { w: 36, h: 36, text: "text-lg", sub: "text-[9px]" },
+    lg: { w: 48, h: 48, text: "text-2xl", sub: "text-[11px]" },
+    xl: { w: 72, h: 72, text: "text-4xl", sub: "text-xs" },
   }[size];
+
+  // Precision SVG Icon Component for Wayline Brand Ribbon
+  const LogoVector = ({ isAppIcon = false }: { isAppIcon?: boolean }) => (
+    <svg
+      width={iconDimensions.w}
+      height={iconDimensions.h}
+      viewBox="0 0 160 130"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      className="flex-shrink-0 select-none drop-shadow-sm"
+    >
+      <defs>
+        {/* Gradients matching the Official Color Palette */}
+        {/* Charcoal: #0B0F0D | Olive: #1F2A1F | Sage: #436352 | Stone: #8B9B89 | Sand: #DAD7C7 | Ivory: #F6F4EB */}
+        <linearGradient id="ribbonLeft" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor="#DAD7C7" />
+          <stop offset="40%" stopColor="#8B9B89" />
+          <stop offset="100%" stopColor="#436352" />
+        </linearGradient>
+
+        <linearGradient id="ribbonFold" x1="0%" y1="100%" x2="100%" y2="0%">
+          <stop offset="0%" stopColor="#1F2A1F" />
+          <stop offset="60%" stopColor="#2A3C2D" />
+          <stop offset="100%" stopColor="#436352" />
+        </linearGradient>
+
+        <linearGradient id="ribbonRight" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor="#8B9B89" />
+          <stop offset="35%" stopColor="#436352" />
+          <stop offset="100%" stopColor="#1F2A1F" />
+        </linearGradient>
+
+        <linearGradient id="starGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor="#F6F4EB" />
+          <stop offset="60%" stopColor="#DAD7C7" />
+          <stop offset="100%" stopColor="#8B9B89" />
+        </linearGradient>
+
+        {/* Topographic pattern for ribbon surface */}
+        <pattern id="topoPattern" width="40" height="40" patternUnits="userSpaceOnUse">
+          <path
+            d="M0 10 Q 10 5, 20 10 T 40 10 M0 20 Q 10 15, 20 20 T 40 20 M0 30 Q 10 25, 20 30 T 40 30"
+            fill="none"
+            stroke="#DAD7C7"
+            strokeWidth="0.5"
+            strokeOpacity="0.25"
+          />
+        </pattern>
+      </defs>
+
+      {/* Optional App Icon Rounded Container */}
+      {isAppIcon && (
+        <rect
+          x="4"
+          y="4"
+          width="152"
+          height="122"
+          rx="28"
+          fill={variant === "app-icon-light" ? "#F6F4EB" : "#0B0F0D"}
+          stroke={variant === "app-icon-light" ? "#DAD7C7" : "#1F2A1F"}
+          strokeWidth="3"
+        />
+      )}
+
+      {/* --- RIBBON "W" COMPONENT --- */}
+      <g transform={isAppIcon ? "scale(0.82) translate(18, 12)" : ""}>
+        {/* 1. Left Diagonal Arm */}
+        <path
+          d="M 22 36 L 40 30 L 64 84 L 46 90 Z"
+          fill="url(#ribbonLeft)"
+        />
+        {/* Topographic Texture Overlay on Left Arm */}
+        <path
+          d="M 22 36 L 40 30 L 64 84 L 46 90 Z"
+          fill="url(#topoPattern)"
+          opacity="0.6"
+        />
+        {/* Left inner contour line */}
+        <path
+          d="M 31 33 L 55 87"
+          stroke="#DAD7C7"
+          strokeWidth="1"
+          strokeOpacity="0.5"
+          strokeDasharray="2 2"
+        />
+
+        {/* 2. Middle Fold / Valley Turn */}
+        <path
+          d="M 46 90 C 54 96, 68 94, 76 78 L 88 56 L 72 52 L 60 76 C 56 82, 50 86, 46 90 Z"
+          fill="url(#ribbonFold)"
+        />
+
+        {/* 3. Mountain Ridge & Apex Arch (Rising to Waypoint Node) */}
+        <path
+          d="M 72 52 L 88 56 L 112 30 C 118 24, 126 28, 130 36 L 148 88 L 132 94 L 118 48 C 116 42, 110 40, 106 44 L 88 64 Z"
+          fill="url(#ribbonRight)"
+        />
+        {/* Topographic Texture Overlay on Right Arch */}
+        <path
+          d="M 72 52 L 88 56 L 112 30 C 118 24, 126 28, 130 36 L 148 88 L 132 94 L 118 48 C 116 42, 110 40, 106 44 L 88 64 Z"
+          fill="url(#topoPattern)"
+          opacity="0.4"
+        />
+
+        {/* 4. Waypoint Center Path Spine */}
+        <path
+          d="M 78 60 Q 96 52, 118 36"
+          stroke="#DAD7C7"
+          strokeWidth="2.5"
+          strokeLinecap="round"
+          strokeOpacity="0.85"
+        />
+
+        {/* 5. Circular Waypoint Node at Mountain Apex */}
+        <g transform="translate(118, 36)">
+          <circle cx="0" cy="0" r="8" fill="#1F2A1F" stroke="#DAD7C7" strokeWidth="2.5" />
+          <circle cx="0" cy="0" r="3.5" fill="#F6F4EB" />
+        </g>
+
+        {/* 6. Compass North Star ✦ at Top Right */}
+        <g transform="translate(142, 22)">
+          {/* Vertical tapered ray */}
+          <polygon
+            points="0,-14 2.5,-3 14,0 2.5,3 0,14 -2.5,3 -14,0 -2.5,-3"
+            fill="url(#starGrad)"
+          />
+          {/* Diagonal secondary sparkle */}
+          <polygon
+            points="0,-7 1.5,-1.5 7,0 1.5,1.5 0,7 -1.5,1.5 -7,0 -1.5,-1.5"
+            fill="#DAD7C7"
+            opacity="0.75"
+            transform="rotate(45)"
+          />
+          {/* Central core */}
+          <circle cx="0" cy="0" r="1.5" fill="#FFFFFF" />
+        </g>
+      </g>
+    </svg>
+  );
+
+  if (variant === "app-icon-dark" || variant === "app-icon-light") {
+    return (
+      <div className={`inline-flex items-center gap-3 select-none ${className}`}>
+        <LogoVector isAppIcon={true} />
+        {showText && (
+          <div className="flex flex-col">
+            <div className={`font-bold tracking-tight ${iconDimensions.text}`}>
+              <span className="text-text-primary">Way</span>
+              <span className="text-brand-stone">line</span>
+            </div>
+            {showTagline && (
+              <span
+                className={`font-semibold uppercase tracking-[0.25em] text-text-muted ${iconDimensions.sub} -mt-0.5`}
+              >
+                Maps That Move You
+              </span>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className={`inline-flex items-center gap-3 select-none ${className}`}>
-      {/* Precision Vector Wayline Icon */}
-      <svg
-        width={iconDimensions.w}
-        height={iconDimensions.h}
-        viewBox="0 0 120 120"
-        fill="none"
-        xmlns="http://www.w3.org/2000/svg"
-        className="flex-shrink-0"
-      >
-        <defs>
-          {/* Main Pin Gradient */}
-          <linearGradient id="pinGrad" x1="20%" y1="0%" x2="80%" y2="100%">
-            <stop offset="0%" stopColor="#34d399" />
-            <stop offset="50%" stopColor="#10b981" />
-            <stop offset="100%" stopColor="#059669" />
-          </linearGradient>
-
-          {/* Glowing Path Gradient */}
-          <linearGradient id="pathGrad" x1="0%" y1="100%" x2="100%" y2="0%">
-            <stop offset="0%" stopColor="#059669" />
-            <stop offset="40%" stopColor="#10b981" />
-            <stop offset="100%" stopColor="#6ee7b7" />
-          </linearGradient>
-
-          {/* Map Base Tile Glass Gradients */}
-          <linearGradient id="tileLeft" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#1f3b30" stopOpacity="0.9" />
-            <stop offset="100%" stopColor="#0d211a" stopOpacity="0.8" />
-          </linearGradient>
-          <linearGradient id="tileRight" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#254d3e" stopOpacity="0.95" />
-            <stop offset="100%" stopColor="#0f261e" stopOpacity="0.85" />
-          </linearGradient>
-
-          {/* Top highlight shine */}
-          <linearGradient id="shineGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#6ee7b7" stopOpacity="0.6" />
-            <stop offset="100%" stopColor="#10b981" stopOpacity="0" />
-          </linearGradient>
-
-          {/* Pin Ambient Glow Filter */}
-          <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
-            <feGaussianBlur stdDeviation="4" result="blur" />
-            <feComposite in="SourceGraphic" in2="blur" operator="over" />
-          </filter>
-        </defs>
-
-        {/* --- Isometric Base Map Tiles --- */}
-        {/* Left isometric panel */}
-        <polygon
-          points="20,62 48,46 62,56 34,74"
-          fill="url(#tileLeft)"
-          stroke="#34d399"
-          strokeWidth="1.2"
-          strokeOpacity="0.4"
-        />
-        {/* Right isometric panel */}
-        <polygon
-          points="62,56 86,40 102,54 78,72"
-          fill="url(#tileRight)"
-          stroke="#6ee7b7"
-          strokeWidth="1.2"
-          strokeOpacity="0.5"
-        />
-
-        {/* Top edge glass highlights */}
-        <path
-          d="M 20 62 L 48 46 L 86 40 L 102 54"
-          stroke="url(#shineGrad)"
-          strokeWidth="1.8"
-          strokeLinecap="round"
-        />
-
-        {/* --- S-Curve Glowing Pathway --- */}
-        <path
-          d="M 34 74 C 44 68, 50 64, 56 60 C 62 56, 64 52, 60 48"
-          stroke="url(#pathGrad)"
-          strokeWidth="6"
-          strokeLinecap="round"
-          filter="url(#glow)"
-        />
-        <path
-          d="M 34 74 C 44 68, 50 64, 56 60 C 62 56, 64 52, 60 48"
-          stroke="#a7f3d0"
-          strokeWidth="2.5"
-          strokeLinecap="round"
-        />
-
-        {/* --- Iconic Wayline Teardrop Location Pin --- */}
-        <g filter="url(#glow)">
-          {/* Main Pin Outer Path */}
-          <path
-            d="M 60 12 C 46 12 36 22 36 36 C 36 49 60 74 60 74 C 60 74 84 49 84 36 C 84 22 74 12 60 12 Z"
-            fill="url(#pinGrad)"
-            stroke="#6ee7b7"
-            strokeWidth="1.5"
-          />
-          {/* Inner Pin Circular Cutout */}
-          <circle cx="60" cy="34" r="10" fill="#090a0f" />
-        </g>
-      </svg>
+      {/* Precision Vector Wayline Ribbon Icon */}
+      <LogoVector isAppIcon={false} />
 
       {/* Brand Typography */}
       {showText && (
         <div className="flex flex-col">
           <div className={`font-bold tracking-tight ${iconDimensions.text}`}>
             <span className="text-text-primary">Way</span>
-            <span className="text-accent-purple">line</span>
+            <span className="text-brand-stone">line</span>
           </div>
           {showTagline && (
             <span
-              className={`font-semibold uppercase tracking-[0.22em] text-text-muted ${iconDimensions.sub} -mt-0.5`}
+              className={`font-semibold uppercase tracking-[0.25em] text-text-muted ${iconDimensions.sub} -mt-0.5`}
             >
               Maps That Move You
             </span>

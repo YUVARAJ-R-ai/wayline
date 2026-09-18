@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { recordKeyUsage } from "../keys/route";
+import { recordKeyUsage } from "@/lib/apiKeyStore";
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);

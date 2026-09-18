@@ -14,8 +14,8 @@ const inter = Inter({
 })
 
 export const metadata: Metadata = {
-  title: 'Wayline Maps',
-  description: 'Find your way with Wayline',
+  title: 'Wayline — Maps That Move You',
+  description: 'Self-hostable spatial infrastructure, low-latency routing graphs, and privacy-first geocoding.',
 }
 
 export default function RootLayout({
