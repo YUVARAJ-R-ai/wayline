@@ -800,24 +800,6 @@ export default function RoutingMap() {
                     {searchLoading ? "..." : "Find"}
                   </button>
                 </div>
-
-                {/* Popular Quick Chips */}
-                <div className="flex items-center gap-1.5 flex-wrap pt-1">
-                  <span className="text-[10px] text-text-muted uppercase font-bold">Popular:</span>
-                  {["Chennai", "Paris", "London", "New York"].map((c) => (
-                    <button
-                      key={c}
-                      type="button"
-                      onClick={() => {
-                        setSearchQuery(c);
-                        handleSearchLocation(c);
-                      }}
-                      className="text-[11px] font-medium px-2 py-0.5 rounded-md bg-bg-base hover:bg-bg-elevated border border-border-subtle text-text-secondary transition-colors"
-                    >
-                      {c}
-                    </button>
-                  ))}
-                </div>
               </form>
 
               {/* Resolved Location Box */}

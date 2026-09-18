@@ -38,19 +38,6 @@ const Map = dynamic(() => import("@/components/Map"), {
   ),
 });
 
-interface SpatialPreset {
-  name: string;
-  coords: [number, number];
-  description: string;
-}
-
-const PRESETS: SpatialPreset[] = [
-  { name: "Chennai Central", coords: [13.0827, 80.2707], description: "Transit Hub & Heritage Zone" },
-  { name: "Guindy Tech Hub", coords: [13.0067, 80.2024], description: "Industrial & IT Cluster" },
-  { name: "OMR IT Corridor", coords: [12.9249, 80.2279], description: "Expressway & Tech Parks" },
-  { name: "Chennai Port", coords: [13.0945, 80.2985], description: "Maritime Logistics Terminal" },
-];
-
 const SAMPLE_CSV_GEOCODED = `name,latitude,longitude,category,city
 Wayline Central Hub,13.0827,80.2707,HQ,Chennai
 Guindy Dispatch Depot,13.0067,80.2024,Logistics,Chennai
@@ -634,38 +621,6 @@ export default function SpatialExplorerPage() {
                 <span>Road Network Graph</span>
                 {showStreets ? <Eye className="w-3.5 h-3.5 text-accent-purple" /> : <EyeOff className="w-3.5 h-3.5" />}
               </button>
-            </div>
-          </div>
-
-          {/* Spatial Hub Presets */}
-          <div className="bg-bg-surface border border-border-default rounded-2xl p-4 shadow-sm space-y-3 select-none">
-            <span className="text-xs font-bold uppercase tracking-wider text-text-secondary flex items-center gap-1.5">
-              <Compass className="w-3.5 h-3.5 text-accent-purple" />
-              Focus Presets
-            </span>
-
-            <div className="space-y-1.5">
-              {PRESETS.map((preset) => (
-                <button
-                  key={preset.name}
-                  onClick={() => {
-                    setCenter(preset.coords);
-                    setMarkerPosition(preset.coords);
-                    setMarkerAddress(preset.name);
-                    setInspectedCoord(preset.coords);
-                    setToastMessage(`Focused on ${preset.name}`);
-                  }}
-                  className="w-full text-left p-2 rounded-xl hover:bg-bg-elevated transition-colors flex items-center justify-between text-xs group"
-                >
-                  <div>
-                    <div className="font-semibold text-text-primary group-hover:text-accent-purple transition-colors">
-                      {preset.name}
-                    </div>
-                    <div className="text-[10px] text-text-muted">{preset.description}</div>
-                  </div>
-                  <Crosshair className="w-3.5 h-3.5 text-text-muted opacity-0 group-hover:opacity-100 transition-opacity" />
-                </button>
-              ))}
             </div>
           </div>
 
