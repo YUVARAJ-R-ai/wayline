@@ -452,10 +452,10 @@ app.get('/api/data/import/status/:jobId', protectWithApiKey, async (req, res) =>
 
 // --- Auth Endpoints ---
 
-// POST /auth/register
+// POST /auth/register and /api/auth/register
 // Body: { email: string, password: string }
 // Returns: 201 on success | 400 if fields missing | 409 if email taken
-app.post('/auth/register', async (req, res) => {
+app.post(['/auth/register', '/api/auth/register'], async (req, res) => {
     const { email, password } = req.body;
 
     // Validate required fields
@@ -483,10 +483,10 @@ app.post('/auth/register', async (req, res) => {
     }
 });
 
-// POST /auth/login
+// POST /auth/login and /api/auth/login
 // Body: { email: string, password: string }
 // Returns: 200 on success | 400 if fields missing | 401 if invalid credentials
-app.post('/auth/login', async (req, res) => {
+app.post(['/auth/login', '/api/auth/login'], async (req, res) => {
     const { email, password } = req.body;
 
     // Validate required fields
