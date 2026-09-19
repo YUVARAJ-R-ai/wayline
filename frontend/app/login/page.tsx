@@ -36,20 +36,57 @@ function LoginForm() {
     setLoading(true);
 
     try {
-      const result = await signIn("credentials", {
-        redirect: false,
-        email,
-        password,
-      });
+      if (mode === "signup") {
+        // 1. Send registration request
+        let regRes = await fetch("/auth/register", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email, password }),
+        });
 
-      if (result?.error) {
-        setError(
-          mode === "signup"
-            ? "Unable to create account. Please check your details."
-            : "Invalid email or password. Please try again."
-        );
-      } else if (result?.ok) {
-        router.push(callbackUrl);
+        // Fallback to Next.js API route if direct /auth/ is not proxied
+        if (regRes.status === 404) {
+          regRes = await fetch("/api/auth/register", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email, password }),
+          });
+        }
+
+        const data = await regRes.json();
+
+        if (!regRes.ok) {
+          setError(data.error || "Unable to create account. Please check your details.");
+          setLoading(false);
+          return;
+        }
+
+        // 2. Automatically log the newly registered user in
+        const result = await signIn("credentials", {
+          redirect: false,
+          email,
+          password,
+        });
+
+        if (result?.error) {
+          setMode("login");
+          setError("Account created successfully. Please sign in with your credentials.");
+        } else if (result?.ok) {
+          router.push(callbackUrl);
+        }
+      } else {
+        // Sign-in mode
+        const result = await signIn("credentials", {
+          redirect: false,
+          email,
+          password,
+        });
+
+        if (result?.error) {
+          setError("Invalid email or password. Please try again.");
+        } else if (result?.ok) {
+          router.push(callbackUrl);
+        }
       }
     } catch {
       setError("An unexpected error occurred. Please try again.");

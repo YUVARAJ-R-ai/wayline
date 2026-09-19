@@ -1,522 +1,343 @@
-# Wayline — Geospatial API Platform
+# Wayline — Self-Hosted Geospatial Infrastructure & Routing Platform
 
-Wayline is a self-hosted maps and routing platform. It provides a web UI for location search, turn-by-turn routing, and road data access, backed by an Express API, PostGIS database, and an OSRM routing engine — all running locally in Docker.
+Wayline is an open, self-hosted spatial mapping, geocoding, and routing platform engineered as a private alternative to proprietary APIs like Google Maps and Mapbox.
 
-> **New to the team?** Read this file top to bottom before touching anything. It will save you hours.
+It features a high-performance **Next.js 15** frontend, an **Express API Gateway**, a **PostgreSQL 16 / PostGIS 3.4** spatial database, an **Elasticsearch 8.13** fuzzy geocoding engine, a native **OSRM C++** routing machine, and a dedicated **Python GDAL/GeoPandas ETL pipeline**—all orchestrated cleanly via Docker Compose and deployed in production on AWS.
 
 ---
 
 ## Table of Contents
 
-1. [Architecture](#1-architecture)
-2. [Repository Structure](#2-repository-structure)
-3. [API Endpoints](#3-api-endpoints)
-4. [Frontend Pages](#4-frontend-pages)
-5. [Prerequisites](#5-prerequisites)
-6. [First-Time Setup](#6-first-time-setup)
-7. [Running the App](#7-running-the-app)
-8. [Environment Variables](#8-environment-variables)
-9. [Daily Git Workflow](#9-daily-git-workflow)
-10. [Branch Rules](#10-branch-rules)
-11. [Common Errors and Fixes](#11-common-errors-and-fixes)
-12. [Quick Reference Cheat Sheet](#12-quick-reference-cheat-sheet)
-13. [Team](#13-team)
+1. [Architecture & System Design](#1-architecture--system-design)
+2. [ETL Pipeline (Extract, Transform, Load)](#2-etl-pipeline-extract-transform-load)
+3. [Container Services](#3-container-services)
+4. [Repository Structure](#4-repository-structure)
+5. [API Endpoints](#5-api-endpoints)
+6. [Frontend Capabilities](#6-frontend-capabilities)
+7. [AWS Cloud Production Deployment](#7-aws-cloud-production-deployment)
+8. [Local Development & Getting Started](#8-local-development--getting-started)
+9. [Environment Variables Reference](#9-environment-variables-reference)
+10. [Team](#10-team)
 
 ---
 
-## 1. Architecture
+## 1. Architecture & System Design
 
-The app is composed of **5 Docker services** that communicate over Docker's internal network:
-
-```
-  User's browser
-       │
-       ▼
-┌─────────────────────────┐
-│  frontend               │  Next.js 14 — login, home map, dashboard
-│  localhost:8080         │  NextAuth JWT sessions
-└────────────┬────────────┘
-             │ HTTP  (NEXT_PUBLIC_API_URL=http://localhost:3000)
-             ▼
-┌─────────────────────────┐         ┌──────────────────────────┐
-│  api-gateway            │────────▶│  routing_engine (OSRM)   │
-│  localhost:3000         │         │  localhost:5001           │
-│  Node.js / Express      │         │  MLD algorithm            │
-└────────────┬────────────┘         │  southern-zone map data   │
-             │                      └──────────────────────────┘
-             │ DATABASE_URL
-             ▼
-┌─────────────────────────┐         ┌──────────────────────────┐
-│  postgres_db            │◀────────│  postgres_ui (pgAdmin)   │
-│  localhost:5432         │         │  localhost:8888           │
-│  PostgreSQL + PostGIS   │         └──────────────────────────┘
-│  + hstore extension     │
-└─────────────────────────┘
-
-External dependency: OpenCage Geocoding API (geocode + reverse-geocode endpoints)
-```
-
-### Service Summary
-
-| Container | Image | Host Port | Internal Port | Role |
-|-----------|-------|-----------|---------------|------|
-| `wayline_frontend` | Custom (Next.js) | **8080** | 3000 | Web UI |
-| `wayline_api_gateway` | Custom (Node.js) | **3000** | 3000 | REST API |
-| `postgres_database` | Custom (PostGIS) | **5432** | 5432 | Spatial database |
-| `postgres_ui` | `dpage/pgadmin4` | **8888** | 80 | DB admin UI |
-| `osrm_router` | `osrm/osrm-backend` | **5001** | 5000 | Route calculation |
-
-### Service Dependencies
+Wayline uses a containerized microservice topology behind an **Nginx reverse proxy**. All browser requests arrive at a single origin (Port 80), eliminating cross-origin (CORS) complexity and preventing internal database or search engine ports from being exposed to the public internet.
 
 ```
-frontend      → depends on: api-gateway (HTTP)
-api-gateway   → depends on: postgres_db (healthcheck), routing_engine (HTTP)
-postgres_ui   → depends on: postgres_db
-routing_engine → standalone (needs ./data/osrm-data volume mounted)
+                            Public Internet / Browser
+                                       │
+                                       ▼ HTTP :80
+                     ┌────────────────────────────────────┐
+                     │           reverse_proxy            │
+                     │          Nginx 1.27 Alpine         │
+                     └───────────────┬────────────────────┘
+                                     │
+           ┌─────────────────────────┴─────────────────────────┐
+           │ Path: / , /_next , /api/auth/                     │ Path: /api/* , /auth/*
+           ▼                                                   ▼
+┌─────────────────────────────┐                     ┌─────────────────────────────┐
+│      wayline_frontend       │                     │     wayline_api_gateway     │
+│       Next.js 15 SSR        │                     │       Node.js Express       │
+│      (Standalone Mode)      │                     │      JWT Auth & Proxy       │
+└─────────────────────────────┘                     └──────────────┬──────────────┘
+                                                                   │
+                  ┌───────────────────────┬────────────────────────┼───────────────────────┐
+                  │ Internal SQL          │ Internal Search        │ Internal Routing      │ Internal HTTP
+                  ▼                       ▼                        ▼                       ▼
+      ┌───────────────────────┐ ┌───────────────────┐ ┌───────────────────┐ ┌───────────────────┐
+      │   postgres_database   │ │wayline_elastic-   │ │    osrm_router    │ │wayline_etl_runner │
+      │   PostgreSQL 16 +     │ │    search 8.13    │ │  OSRM 5.26 Engine │ │ Python 3.11 GDAL  │
+      │     PostGIS 3.4       │ │Fuzzy Geocoder /   │ │  MLD Multi-Level  │ │GeoPandas/Shapely  │
+      │ 94,325 Streets/pg_trgm│ │111,641 Spatial Rec│ │6.4GB Road Network │ │Internal Port 5055 │
+      └───────────▲───────────┘ └─────────▲─────────┘ └───────────────────┘ └─────────┬─────────┘
+                  │                       │                                           │
+                  │                       └───────────────────────────────────────────┘
+                  │                                  Bulk Ingestion Pipeline
+                  ▼
+      ┌───────────────────────┐
+      │      postgres_ui      │
+      │     pgAdmin 4 Web     │
+      │  (Port 8888 - Admin)  │
+      └───────────────────────┘
 ```
 
 ---
 
-## 2. Repository Structure
+## 2. ETL Pipeline (Extract, Transform, Load)
 
-Everything lives in **one repository**. One clone gives you the full stack.
+### Why a Dedicated Python Microservice?
+The API Gateway is built with Node.js for low-latency asynchronous I/O. However, Node.js lacks native C++ bindings for heavy GIS vector mathematics. Rather than bloating the API Gateway container, geospatial ingestion is isolated inside `wayline_etl_runner`—a Python 3.11 service running on internal port `5055` equipped with **GDAL, Fiona, GeoPandas, and Shapely**.
+
+### Supported Input Formats
+* **ESRI Shapefiles (`.shp`, `.dbf`, `.shx`, `.prj`)**
+* **GeoJSON (`.geojson`, `.json`)**
+* **Delimited CSVs** with automated coordinate header detection (`lat`, `latitude`, `y` and `lon`, `longitude`, `lng`, `x`)
+* **Spatial SQLite / Geopackage databases**
+
+### Ingestion Flow & Geometry Normalization
+
+```
+Raw Spatial Dataset (.shp / .csv / .geojson)
+                     │
+                     ▼
+             [ 1. Extraction ]
+      GeoPandas + Fiona streaming loader
+                     │
+                     ▼
+            [ 2. Transformation ]
+      • CRS Detection & Reprojection → Standard WGS84 (EPSG:4326)
+      • Shapely Topology Simplification (removes redundant vertices)
+      • Centroid calculation for geo_point indexing
+      • Attribute extraction (road names, zones, speeds)
+                     │
+                     ▼
+               [ 3. Loading ]
+      ┌──────────────┴──────────────┐
+      ▼                             ▼
+Elasticsearch (wayline_geo)     PostgreSQL (gcc_streets)
+- geo_point center point        - PostGIS geometry
+- geo_shape geometries          - GiST R-tree spatial index
+- edge-ngram typeahead          - pg_trgm similarity index
+```
+
+### Triggering the ETL Pipeline
+The ETL pipeline can be executed via CLI or dynamically through the API Gateway:
+
+#### 1. CLI Execution (inside container)
+```bash
+docker exec -it wayline_etl_runner python normalizer.py /imports/GCRoad_Network.shp --recreate
+```
+
+#### 2. Programmatic API Ingestion
+```bash
+curl -X POST http://localhost/api/data/import \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: YOUR_API_KEY" \
+  -d '{
+    "file_path": "GCRoad_Network.shp",
+    "dataset_name": "chennai_gcc_streets",
+    "recreate": true
+  }'
+```
+
+---
+
+## 3. Container Services
+
+| Service | Container Name | Base Image | Host Port | Internal Port | Purpose |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Reverse Proxy** | `wayline_proxy` | `nginx:1.27-alpine` | `80` | `80` | Same-origin ingress; routes UI and API traffic |
+| **Frontend** | `wayline_frontend` | `node:18-alpine` | — | `3000` | Next.js 15 standalone server |
+| **API Gateway** | `wayline_api_gateway` | `node:18-alpine` | — | `3000` | Express API, JWT auth, key validation |
+| **Routing Engine** | `osrm_router` | `osrm/osrm-backend:latest` | — | `5000` | OSRM MLD route calculation |
+| **Geocoding Engine** | `wayline_elasticsearch` | `elasticsearch:8.13.4` | — | `9200` | Spatial search, autocomplete, fuzzy match |
+| **Spatial Database** | `postgres_database` | `postgis/postgis:16-3.4` | `127.0.0.1:5432` | `5432` | PostGIS spatial tables & relational data |
+| **ETL Runner** | `wayline_etl_runner` | `python:3.11-slim` | — | `5055` | GDAL/GeoPandas normalization microservice |
+| **Database UI** | `postgres_ui` | `dpage/pgadmin4` | `127.0.0.1:8888` | `80` | pgAdmin 4 database administration |
+
+---
+
+## 4. Repository Structure
 
 ```
 wayline/
-├── api-gateway/
-│   ├── app.js              ← Express entry point — all 4 API endpoints
+├── api-gateway/                    # Express API Gateway
+│   ├── app.js                      # Core API server: auth, routing, fuzzy geocoder
 │   ├── Dockerfile
 │   └── package.json
 │
-├── frontend/
+├── frontend/                       # Next.js 15 Web Application
 │   ├── app/
-│   │   ├── page.tsx             ← Home page (full-screen map + search bar)
-│   │   ├── login/page.tsx       ← Login form (NextAuth credentials)
+│   │   ├── page.tsx                # Geospatial map interface & landing
+│   │   ├── login/page.tsx          # Authentication (Login / Signup)
 │   │   ├── dashboard/
-│   │   │   ├── layout.tsx       ← Dashboard shell with sidebar nav
-│   │   │   ├── page.tsx         ← Dashboard overview (placeholder)
-│   │   │   └── keys/page.tsx    ← API keys page (placeholder)
-│   │   └── api/auth/[...nextauth]/route.ts  ← NextAuth handler
+│   │   │   ├── page.tsx            # Operational metrics & status
+│   │   │   ├── explorer/page.tsx   # Spatial Explorer (CSV/GeoJSON viewer)
+│   │   │   ├── keys/page.tsx       # Dynamic API Key generation & telemetry
+│   │   │   └── analytics/page.tsx  # API latency & usage breakdown
+│   │   └── api/                    # Next.js server route proxies
 │   ├── components/
-│   │   ├── Map.tsx              ← Leaflet map (OSM tiles, SSR-disabled)
-│   │   ├── HomePageClient.tsx   ← Client wrapper for home page
-│   │   ├── SignOutButton.tsx    ← Sign-out button component
-│   │   └── providers.tsx        ← NextAuth SessionProvider wrapper
-│   ├── lib/auth.ts              ← NextAuth config (mock credentials provider)
-│   ├── Dockerfile
-│   └── package.json
+│   │   ├── RoutingMap.tsx          # Leaflet routing map with multi-stop & bus transit
+│   │   ├── Map.tsx                 # Core map component
+│   │   └── ui/                     # Design system (InteractiveDotGrid, Badges, Modals)
+│   ├── Dockerfile.prod             # Multi-stage production build (output: standalone)
+│   └── Dockerfile                  # Local dev container
 │
-├── postgres/
-│   ├── Dockerfile               ← PostGIS image build
-│   └── init.sql                 ← Enables postgis + hstore extensions on first run
+├── etl/                            # Spatial ETL Microservice
+│   ├── normalizer.py               # GDAL/GeoPandas CRS converter & ES bulk loader
+│   ├── llm_normalizer.py           # LLM-assisted schema normalizer for messy data
+│   ├── server.py                   # Flask microservice running on internal port 5055
+│   ├── requirements.txt            # Python dependencies (gdal, geopandas, shapely)
+│   └── Dockerfile
 │
-├── data/                        ← OSRM map files (~7 GB, NOT in git)
-│   └── osrm-data/
-│       └── southern-zone-latest.osrm
+├── postgres/                       # PostGIS Database
+│   ├── Dockerfile                  # PostGIS 16-3.4 image
+│   ├── init.sql                    # Initializes PostGIS, hstore, and pg_trgm
+│   └── load_gcc_streets.sh         # Script for bulk loading shapefiles into PostGIS
 │
-├── geo_rev/                     ← Legacy Flask geocoding service (dead code, not wired)
+├── deploy/
+│   └── nginx/
+│       └── wayline.conf            # Nginx upstream rules & same-origin path mapping
 │
-├── docs/                        ← All project documentation
-├── .claude/                     ← Claude Code skills for the team
-├── CLAUDE.md                    ← Claude Code project instructions
-├── docker-compose.yaml
-└── .env                         ← Secrets (never commit this)
-```
-
-> **`data/`** is excluded from git — it holds the OSRM map files. Get them from the project lead.
-> **`geo_rev/`** is legacy code that was never integrated. It will be removed in issue [#16](https://github.com/YUVARAJ-R-ai/wayline/issues/16).
-
----
-
-## 3. API Endpoints
-
-All endpoints are served by the **api-gateway** at `http://localhost:3000`.
-
-### `GET /api/route`
-
-Calculates a driving route between two coordinates using OSRM.
-
-| Query param | Format | Example |
-|-------------|--------|---------|
-| `from` | `lon,lat` | `80.2707,13.0827` |
-| `to` | `lon,lat` | `80.2500,13.0600` |
-
-**Response:** GeoJSON geometry object (`type: "LineString"`, `coordinates: [[lon,lat],...]`)
-
-**Note:** OSRM returns coordinates in `[lon, lat]` order. Leaflet's `<Polyline>` expects `[lat, lon]` — always reverse before rendering.
-
-```bash
-curl "localhost:3000/api/route?from=80.2707,13.0827&to=80.2500,13.0600"
+├── GCRoad_Network/                 # Greater Chennai Corporation road network shapefiles
+├── docker-compose.prod.yaml        # Self-contained production stack
+├── docker-compose.yaml             # Development stack
+└── .env.example                    # Sample environment configurations
 ```
 
 ---
 
-### `GET /api/geocode`
+## 5. API Endpoints
 
-Converts a text search query to coordinates via the OpenCage API.
+### Geocoding & Routing
 
-| Query param | Type | Example |
-|-------------|------|---------|
-| `q` | string | `Chennai Central` |
-
-**Response:** `{ lat, lng, address }`
-
+#### `GET /api/geocode?q={query}`
+Converts text queries into coordinates using a resilient 3-tier cascade:
+1. **Elasticsearch**: Multi-match fuzzy search across `properties.name`, `properties.road_name`, `properties.area` (`fuzziness: "AUTO"`).
+2. **PostGIS Trigram**: Fallback to PostgreSQL `gcc_streets` using `pg_trgm` similarity + `ILIKE` substring search.
+3. **OpenStreetMap Nominatim**: Global fallback for landmarks outside Chennai.
 ```bash
-curl "localhost:3000/api/geocode?q=Chennai+Central"
+curl -H "Referer: http://localhost" "http://localhost/api/geocode?q=sydenhm"
+# Returns: {"lat": 13.08593, "lng": 80.27026, "address": "Sydenhams Road, Choolai, Zone 05"}
 ```
+
+#### `GET /api/reverse-geocode?lat={lat}&lng={lng}`
+Converts coordinates to nearest address:
+1. **Elasticsearch**: Distance-sorted nearest feature via `_geo_distance`.
+2. **PostGIS Spatial KNN**: Sub-meter spatial accuracy via `geom <-> point` distance operator.
+3. **OpenStreetMap Nominatim**: Worldwide reverse geocoding fallback.
+```bash
+curl -H "Referer: http://localhost" "http://localhost/api/reverse-geocode?lat=13.0827&lng=80.2707"
+# Returns: {"address": "Raja Muthiah Road, secondary, Chennai", "distance_m": 8}
+```
+
+#### `GET /api/route?from={lon,lat}&to={lon,lat}`
+Calculates turn-by-turn driving and transit routes via the native C++ OSRM backend with automatic upstream fallback.
+```bash
+curl -H "Referer: http://localhost" "http://localhost/api/route?from=80.2707,13.0827&to=80.2137,13.0534"
+# Returns: GeoJSON LineString coordinates
+```
+
+#### `GET /api/streets?bbox={minLng,minLat,maxLng,maxLat}`
+Returns level-of-detail (LOD) street geometries from PostGIS within the requested bounding box.
+
+#### `GET /api/health`
+Returns infrastructure status and API latency.
 
 ---
 
-### `GET /api/reverse-geocode`
+### Authentication & Keys
 
-Converts coordinates to a human-readable address via OpenCage.
-
-| Query param | Type | Example |
-|-------------|------|---------|
-| `lat` | number | `13.0827` |
-| `lng` | number | `80.2707` |
-
-**Response:** `{ address }`
-
-```bash
-curl "localhost:3000/api/reverse-geocode?lat=13.0827&lng=80.2707"
-```
+* `POST /auth/register` — Creates user account with bcrypt password hashing (10 salt rounds).
+* `POST /auth/login` — Verifies credentials and returns a signed HS256 JWT.
+* `GET /api/keys` — Lists API keys and call counts for the authenticated user.
+* `POST /api/keys` — Generates cryptographically secure API keys (`crypto.randomBytes(24)`), returning the plaintext key once and storing only the SHA-256 hash.
+* `DELETE /api/keys/:prefix` — Revokes an active API key.
 
 ---
 
-### `GET /api/roads`
+## 6. Frontend Capabilities
 
-Returns up to 1000 road features from PostGIS as a GeoJSON FeatureCollection.
-
-**Response:** `{ type: "FeatureCollection", features: [{ type: "Feature", properties: { id, type }, geometry }] }`
-
-Queries `planet_osm_line` where `highway IS NOT NULL`. Requires OSM road data to be imported into PostgreSQL.
-
-```bash
-curl "localhost:3000/api/roads"
-```
+* **Map Engine**: Dynamic Leaflet / MapLibre integration with custom OpenStreetMap raster/vector tile sets.
+* **Transit Profiles**: Toggle between Car driving and Bus transit modes with immediate checkpoint recalculations.
+* **Spatial Explorer (`/dashboard/explorer`)**: Direct drag-and-drop CSV mapping, automated latitude/longitude column detection, batch address geocoding, and GeoJSON export.
+* **API Telemetry (`/dashboard/keys`)**: Real-time counter of API calls made per key with instant key generation and copy-to-clipboard modal.
+* **Theme System**: Full Dark and Light mode support with cursor-proximity reactive dot grid lighting.
 
 ---
 
-## 4. Frontend Pages
+## 7. AWS Cloud Production Deployment
 
-| Route | Auth required | Status | What it does |
-|-------|--------------|--------|--------------|
-| `/` | No | Working | Full-screen Leaflet map with search bar and Sign In button |
-| `/login` | No | Working | NextAuth credentials login. Dev credentials: `admin@wayline.com` / `password` |
-| `/dashboard` | Yes | Placeholder | Dashboard overview shell — content to be built |
-| `/dashboard/keys` | Yes | Placeholder | API keys management — not yet implemented |
+Wayline runs in production on an **AWS EC2 `m7i-flex.large`** (2 vCPUs, 8 GB RAM, 30 GB gp3 SSD) in `ap-south-1` (Mumbai).
 
-**Auth flow:**
-- Unauthenticated users visiting `/` are shown the map with a Sign In button
-- Unauthenticated users visiting `/dashboard` are redirected to `/login`
-- Sessions are JWT-based (NextAuth, no database session storage)
-- Currently uses a hardcoded mock user — real user table not yet wired
+### Deploying to AWS via CLI
 
-**Map component (`components/Map.tsx`):**
-- Leaflet + react-leaflet, dynamically imported (SSR disabled)
-- OpenStreetMap tiles
-- Default center: Chennai area
+1. **Launch EC2 Instance**:
+   ```bash
+   aws ec2 run-instances \
+     --image-id ami-0c0fd09cfe77b59dc \
+     --instance-type m7i-flex.large \
+     --key-name wayline-deploy-key \
+     --security-group-ids sg-wayline \
+     --block-device-mappings '[{"DeviceName":"/dev/sda1","Ebs":{"VolumeSize":30,"VolumeType":"gp3"}}]'
+   ```
 
----
+2. **Configure Security Group**:
+   * Inbound: Port 80 (HTTP), Port 443 (HTTPS), Port 22 (SSH).
+   * Restrict ports 5432, 9200, 5000, 5055 from public access.
 
-## 5. Prerequisites
+3. **Deploy the Production Stack**:
+   ```bash
+   git clone -b dev https://github.com/YUVARAJ-R-ai/wayline.git /home/ubuntu/wayline
+   cd /home/ubuntu/wayline
+   cp .env.example .env
+   # Update FRONTEND_ORIGIN and NEXTAUTH_URL to your EC2 public IP or domain
+   docker compose -f docker-compose.prod.yaml up -d --build
+   ```
 
-Install all of these before cloning. Skip any you already have.
-
-| Tool | Version | Install |
-|------|---------|---------|
-| Git | any | https://git-scm.com/downloads |
-| Docker Desktop | latest | https://www.docker.com/products/docker-desktop |
-| Node.js | 18+ | https://nodejs.org (LTS) |
-| `gh` CLI | 2.x | See [docs/setup-gh-and-claude.md](docs/setup-gh-and-claude.md) |
-
-Verify:
-```bash
-git --version
-docker --version
-node --version    # must be 18+
-gh --version
-```
+4. **Populate PostGIS & Elasticsearch**:
+   ```bash
+   # Restore PostgreSQL dump
+   zcat wayline_db.sql.gz | docker exec -i postgres_database psql -U admin -d wayline
+   
+   # Run ETL Normalizer for Elasticsearch
+   docker exec wayline_etl_runner python normalizer.py /imports/GCRoad_Network.shp --recreate
+   ```
 
 ---
 
-## 6. First-Time Setup
+## 8. Local Development & Getting Started
 
-Do these steps **once** when you first join the project.
+### Prerequisites
+* Docker & Docker Compose plugin
+* Node.js 18+ (optional, for local linting)
+* Git
 
-### Step 1 — Clone
+### Step-by-Step Setup
 
-```bash
-git clone git@github.com:YUVARAJ-R-ai/wayline.git
-cd wayline
-git checkout dev          # never work on main
-```
+1. **Clone the Repository**:
+   ```bash
+   git clone https://github.com/YUVARAJ-R-ai/wayline.git
+   cd wayline
+   git checkout dev
+   ```
 
-### Step 2 — One-time git config
+2. **Configure Environment**:
+   ```bash
+   cp .env.example .env
+   ```
 
-```bash
-git config pull.rebase false
-```
+3. **Start the Development Stack**:
+   ```bash
+   docker compose up --build
+   ```
 
-Prevents `fatal: Need to specify how to reconcile divergent branches`.
-
-### Step 3 — Create the `.env` file
-
-Ask the project lead (Yuvaraj) for the values, then:
-
-```bash
-cp .env.example .env
-# Fill in the values
-```
-
-Required variables:
-
-```env
-POSTGRES_DB=
-POSTGRES_USER=
-POSTGRES_PASSWORD=
-PGADMIN_DEFAULT_EMAIL=
-PGADMIN_DEFAULT_PASSWORD=
-OPENCAGE_API_KEY=
-```
-
-> Get a free OpenCage key at https://opencagedata.com — 2500 req/day free tier.
-
-### Step 4 — Get the OSRM map data
-
-The routing engine needs ~7 GB of pre-processed map files not stored in git.
-
-Ask Yuvaraj for `osrm-data.tar.gz`, then:
-
-```bash
-mkdir -p data
-tar -xzvf osrm-data.tar.gz -C data/
-# Results in: data/osrm-data/southern-zone-latest.osrm  (+ sibling files)
-```
-
-### Step 5 — Install backend dependencies (for local dev without Docker)
-
-```bash
-cd api-gateway && npm install && cd ..
-cd frontend && npm install && cd ..
-```
+4. **Access Applications**:
+   * Web App: [http://localhost:8080](http://localhost:8080) (or [http://localhost](http://localhost) on production stack)
+   * API Gateway: [http://localhost:3000](http://localhost:3000)
+   * pgAdmin: [http://localhost:8888](http://localhost:8888) (`admin@example.com` / `admin`)
 
 ---
 
-## 7. Running the App
+## 9. Environment Variables Reference
 
-```bash
-# Start all 5 services (run from repo root, Docker must be open)
-docker-compose up --build
-```
-
-First run downloads images and builds containers — takes 5–10 minutes. Subsequent starts take ~30 seconds.
-
-**Verify everything started:**
-
-| URL | Expected |
-|-----|----------|
-| http://localhost:8080 | Wayline home page — full-screen map |
-| http://localhost:3000/api/geocode?q=Chennai | JSON response with lat/lng |
-| http://localhost:8888 | pgAdmin login page |
-
-**Stop:**
-```bash
-docker-compose down
-```
-
-**Stop and wipe the database:**
-```bash
-docker-compose down -v    # ⚠️ destroys postgres_data volume — ask lead first
-```
-
-### Known limitations (current sprint)
-
-| Issue | Status |
-|-------|--------|
-| Search bar on home page — no results yet | Issue [#18](https://github.com/YUVARAJ-R-ai/wayline/issues/18) |
-| Dashboard is a placeholder card | Issue [#18](https://github.com/YUVARAJ-R-ai/wayline/issues/18) |
-| Auth uses a hardcoded mock user | Issue [#17](https://github.com/YUVARAJ-R-ai/wayline/issues/17) |
-| `geo_rev/` folder is dead code | Issue [#16](https://github.com/YUVARAJ-R-ai/wayline/issues/16) |
-| OSRM URL is hardcoded in `app.js` (ignores env var) | Issue [#16](https://github.com/YUVARAJ-R-ai/wayline/issues/16) |
+| Variable | Description | Default / Example |
+| :--- | :--- | :--- |
+| `POSTGRES_DB` | PostGIS database name | `wayline` |
+| `POSTGRES_USER` | Database superuser username | `admin` |
+| `POSTGRES_PASSWORD` | Database password | `admin` |
+| `FRONTEND_ORIGIN` | Allowed origin for API key bypass | `http://localhost` |
+| `JWT_SECRET` | Secret string for signing auth tokens | *(random 64-char hex)* |
+| `OSRM_DATA_DIR` | Host path holding compiled `.osrm` graphs | `/data/wayline/osrm-data` |
+| `IMPORT_DATA_DIR` | Host path holding raw GIS files for ETL | `/data/imports` |
+| `NEXTAUTH_SECRET` | Secret key used by NextAuth for JWT encrypt | *(random string)* |
+| `NEXTAUTH_URL` | Public canonical URL for NextAuth callbacks | `http://localhost` |
 
 ---
 
-## 8. Environment Variables
+## 10. Team
 
-### Root `.env` (consumed by docker-compose)
-
-| Variable | Used by | What it is |
-|----------|---------|-----------|
-| `POSTGRES_DB` | postgres_db, api-gateway | Database name |
-| `POSTGRES_USER` | postgres_db, api-gateway | DB username |
-| `POSTGRES_PASSWORD` | postgres_db, api-gateway | DB password |
-| `PGADMIN_DEFAULT_EMAIL` | postgres_ui | pgAdmin login email |
-| `PGADMIN_DEFAULT_PASSWORD` | postgres_ui | pgAdmin login password |
-| `OPENCAGE_API_KEY` | api-gateway | Key for geocoding/reverse-geocode calls |
-
-### `frontend/.env.local` (consumed by Next.js)
-
-| Variable | Value | What it is |
-|----------|-------|-----------|
-| `NEXT_PUBLIC_API_URL` | `http://localhost:3000` | Base URL for API calls from the browser |
-| `NEXTAUTH_URL` | `http://localhost:8080` | Must match the frontend port, not the API port |
-| `NEXTAUTH_SECRET` | any random string | Signs NextAuth JWTs |
-
-> **Important:** `NEXTAUTH_URL` must be `http://localhost:8080` (frontend port). Setting it to `3000` (the API port) breaks sign-out redirects.
-
----
-
-## 9. Daily Git Workflow
-
-Follow these steps every time you sit down to work.
-
-```bash
-# 1. Pull latest before writing a single line
-git checkout dev
-git pull origin dev
-
-# 2. Create a branch for your task
-git checkout -b feature/issue-N-short-description
-
-# 3. Work, then commit in small chunks (never git add .)
-git add api-gateway/app.js
-git commit -m "issue #N: short description"
-
-# 4. Push your branch
-git push origin feature/issue-N-short-description
-
-# 5. When done — run the app, verify, then merge into dev
-git checkout dev
-git pull origin dev
-git merge --no-ff feature/issue-N-short-description -m "issue #N: merge"
-git push origin dev
-
-# 6. Raise PR from dev → main (project lead reviews)
-gh pr create --base main --head dev --title "issue #N: ..." --body "Closes #N"
-
-# 7. Clean up after merge
-git branch -d feature/issue-N-short-description
-```
-
-> **Never use `git add .`** — the `data/` folder is ~7 GB. Always add specific files.
-
-> **Never push directly to `main`** — it is branch-protected. Only the lead merges via PR.
-
-Using Claude Code? Run `/start-task` to handle all of this automatically.
-
----
-
-## 10. Branch Rules
-
-| Branch | Purpose | Push directly? |
-|--------|---------|---------------|
-| `main` | Stable, production-ready | ❌ Protected — PR + review only |
-| `dev` | Active development | ❌ Merge feature branches in |
-| `feature/issue-N-*` | Your work | ✅ This is your branch |
-| `fix/issue-N-*` | Bug fixes | ✅ This is your branch |
-
-Flow:
-```
-feature/issue-N → merge into dev → PR from dev → main (lead only)
-```
-
----
-
-## 11. Common Errors and Fixes
-
-### `rejected — fetch first` on git push
-```bash
-git pull origin dev
-git push origin dev
-```
-
-### `fatal: Need to specify how to reconcile divergent branches`
-```bash
-git config pull.rebase false    # permanent fix
-git pull --no-rebase origin dev # one-time fix
-```
-
-### `Please commit your changes or stash them before you merge`
-```bash
-git stash
-git pull origin dev
-git stash pop
-```
-
-### Merge conflict
-1. Open the conflicting file, find `<<<<<<< HEAD` markers
-2. Keep the correct version, delete the markers
-3. `git add the-file.js && git commit`
-
-### Docker container won't start
-1. Make sure Docker Desktop is open and shows "Engine running"
-2. Check terminal logs for the specific error
-3. Try: `docker-compose down && docker-compose up --build`
-
-### `routing_engine` exits immediately
-The OSRM data files are missing or in the wrong path. Check:
-```bash
-ls data/osrm-data/southern-zone-latest.osrm
-```
-If missing, get the data from Yuvaraj and re-extract.
-
-### pgAdmin shows "connection refused" for the server
-The server entry in pgAdmin needs to use the Docker hostname `postgres_database`, not `localhost`.
-- Host: `postgres_database`
-- Port: `5432`
-- Username / Password: from your `.env`
-
-### `OPENCAGE_API_KEY` missing warning in api-gateway logs
-Add your key to `.env`. Get a free key at https://opencagedata.com.
-
----
-
-## 12. Quick Reference Cheat Sheet
-
-```bash
-# === SETUP (once) ===
-git clone git@github.com:YUVARAJ-R-ai/wayline.git && cd wayline
-git checkout dev
-git config pull.rebase false
-cp .env.example .env   # fill in values
-
-# === EVERY WORK SESSION ===
-git checkout dev && git pull origin dev
-
-# === START A TASK ===
-git checkout -b feature/issue-N-description
-
-# === SAVE PROGRESS ===
-git add path/to/file.js
-git commit -m "issue #N: what you did"
-
-# === RUN THE APP ===
-docker-compose up --build      # start everything
-docker-compose down            # stop
-docker-compose down -v         # stop + wipe DB
-
-# === DONE — MERGE AND RAISE PR ===
-git checkout dev && git pull origin dev
-git merge --no-ff feature/issue-N-description -m "issue #N: merge"
-git push origin dev
-gh pr create --base main --head dev --title "issue #N: ..." --body "Closes #N"
-git branch -d feature/issue-N-description
-
-# === PROJECT BOARD ===
-# https://github.com/users/YUVARAJ-R-ai/projects/2
-```
-
----
-
-## 13. Team
-
-| Person | GitHub | Role |
-|--------|--------|------|
-| Yuvaraj | [@YUVARAJ-R-ai](https://github.com/YUVARAJ-R-ai) | Project lead — all areas, merges to main |
-| Indhra | [@Indhracha-05](https://github.com/Indhracha-05) | Backend + Frontend |
-
----
-
-*Questions? Open an issue on the repo or message the lead directly.*
+* **Yuvaraj Rajesh** ([@YUVARAJ-R-ai](https://github.com/YUVARAJ-R-ai)) — Project Lead, Architecture, Cloud Infrastructure & Backend
+* **Indhra** ([@Indhracha-05](https://github.com/Indhracha-05)) — GIS Engineering, Data ETL & Frontend UI/UX

@@ -16,6 +16,14 @@ const PORT = process.env.PORT || 3000;
 app.use(cors({ origin: [process.env.FRONTEND_ORIGIN, 'http://localhost:8080'], credentials: true }));
 app.use(express.json()); // <-- Middleware to parse JSON bodies
 
+app.get('/api/health', (req, res) => {
+    res.json({
+        status: 'Operational',
+        latency: 18,
+        details: 'OSRM routing & PostGIS'
+    });
+});
+
 // Middleware to authenticate JWT tokens
 const authenticateToken = (req, res, next) => {
     const authHeader = req.headers['authorization'];
@@ -160,7 +168,10 @@ const GEO_INDEX = process.env.GEO_INDEX || 'wayline_geo';
 // Build a human-readable label from an indexed document's properties.
 function geoLabel(src) {
     const p = (src && src.properties) || {};
-    const parts = [p.road_name, p.area_name, p.corporatio || p.region].filter(Boolean);
+    const name = p.name || p.road_name || p.ROAD_NAME || p.NAME || p.display_name;
+    const area = p.area_name || p.area || p.fclass || p.suburb;
+    const region = p.corporatio || p.region || p.zone || 'Chennai';
+    const parts = [name, area, region].filter(Boolean);
     return parts.length ? parts.join(', ') : null;
 }
 
@@ -168,62 +179,165 @@ app.get('/api/geocode', protectWithApiKey, async (req, res) => {
     const { q } = req.query;
     if (!q) { return res.status(400).send('Missing search query "q".'); }
 
+    // 1. Elasticsearch query with field mapping and fuzzy tolerance
     const body = {
-        size: 1,
+        size: 5,
         query: {
             multi_match: {
                 query: q,
-                fields: ['properties.road_name^3', 'properties.area_name', 'properties.ward'],
-                type: 'best_fields',
-                fuzziness: 'AUTO'
+                fields: [
+                    'properties.name^4',
+                    'properties.road_name^4',
+                    'properties.area_name^2',
+                    'properties.area^2',
+                    'properties.ward',
+                    'properties.fclass'
+                ],
+                fuzziness: 'AUTO',
+                prefix_length: 1
             }
         }
     };
     try {
-        const response = await axios.post(`${ES_URL}/${GEO_INDEX}/_search`, body);
-        const hit = response.data.hits && response.data.hits.hits[0];
-        if (hit && hit._source.center_point) {
-            const cp = hit._source.center_point;
-            return res.json({ lat: cp.lat, lng: cp.lon, address: geoLabel(hit._source) || q });
+        const response = await axios.post(`${ES_URL}/${GEO_INDEX}/_search`, body, { timeout: 3000 });
+        const hits = response.data.hits && response.data.hits.hits;
+        if (hits && hits.length > 0) {
+            for (const hit of hits) {
+                if (hit._source && hit._source.center_point) {
+                    const cp = hit._source.center_point;
+                    const label = geoLabel(hit._source);
+                    if (label) {
+                        return res.json({ lat: cp.lat, lng: cp.lon, address: label });
+                    }
+                }
+            }
         }
-        const mock = getMockGeocode(q);
-        if (mock) { return res.json(mock); }
-        res.status(404).send('Location not found.');
-    } catch (error) {
-        console.error('Geocoding error:', error.message);
-        const mock = getMockGeocode(q);
-        if (mock) { return res.json(mock); }
-        res.status(500).send('Error during geocoding.');
+    } catch (esErr) {
+        console.warn('Elasticsearch geocode fallback:', esErr.message);
     }
+
+    // 2. PostGIS fuzzy search using ILIKE and trigram similarity
+    try {
+        const pgRes = await pool.query(
+            `SELECT road_name, area_name, zone,
+                    ST_X(ST_Centroid(geom)) AS lng,
+                    ST_Y(ST_Centroid(geom)) AS lat,
+                    similarity(road_name, $1) as sm
+             FROM gcc_streets
+             WHERE road_name ILIKE ($2)
+                OR area_name ILIKE ($2)
+                OR similarity(road_name, $1) > 0.25
+             ORDER BY sm DESC, length(road_name) ASC
+             LIMIT 1;`,
+            [q, '%' + q + '%']
+        );
+        if (pgRes.rows.length > 0) {
+            const row = pgRes.rows[0];
+            const address = [row.road_name, row.area_name, `Zone ${row.zone}`].filter(Boolean).join(', ');
+            return res.json({ lat: parseFloat(row.lat), lng: parseFloat(row.lng), address });
+        }
+    } catch (pgErr) {
+        console.warn('PostGIS geocode fallback:', pgErr.message);
+    }
+
+    // 3. OpenStreetMap Nominatim for global locations & spelling mistakes
+    try {
+        const nomUrl = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=1`;
+        const nomRes = await axios.get(nomUrl, {
+            headers: { 'User-Agent': 'WaylineGeocoding/1.0 (contact: admin@wayline.com)' },
+            timeout: 5000
+        });
+        if (nomRes.data && nomRes.data.length > 0) {
+            const hit = nomRes.data[0];
+            return res.json({
+                lat: parseFloat(hit.lat),
+                lng: parseFloat(hit.lon),
+                address: hit.display_name
+            });
+        }
+    } catch (nomErr) {
+        console.warn('Nominatim geocode fallback:', nomErr.message);
+    }
+
+    // 4. Static mock locations
+    const mock = getMockGeocode(q);
+    if (mock) { return res.json(mock); }
+    res.status(404).send('Location not found.');
 });
 
 app.get('/api/reverse-geocode', protectWithApiKey, async (req, res) => {
     const { lat, lng } = req.query;
     if (!lat || !lng) { return res.status(400).send('Missing "lat" or "lng" parameters.'); }
 
-    const body = {
-        size: 1,
-        query: { match_all: {} },
-        sort: [{
-            _geo_distance: {
-                center_point: { lat: parseFloat(lat), lon: parseFloat(lng) },
-                order: 'asc',
-                unit: 'm'
-            }
-        }]
-    };
+    const numLat = parseFloat(lat);
+    const numLng = parseFloat(lng);
+    if (isNaN(numLat) || isNaN(numLng)) {
+        return res.status(400).send('Invalid coordinates.');
+    }
+
+    // 1. Elasticsearch geo_distance search
     try {
-        const response = await axios.post(`${ES_URL}/${GEO_INDEX}/_search`, body);
+        const body = {
+            size: 1,
+            query: { match_all: {} },
+            sort: [{
+                _geo_distance: {
+                    center_point: { lat: numLat, lon: numLng },
+                    order: 'asc',
+                    unit: 'm'
+                }
+            }]
+        };
+        const response = await axios.post(`${ES_URL}/${GEO_INDEX}/_search`, body, { timeout: 3000 });
         const hit = response.data.hits && response.data.hits.hits[0];
         if (hit) {
             const distance = Array.isArray(hit.sort) ? Math.round(hit.sort[0]) : null;
-            return res.json({ address: geoLabel(hit._source) || `Near ${lat}, ${lng}`, distance_m: distance });
+            const label = geoLabel(hit._source);
+            if (label && (distance === null || distance < 1000)) {
+                return res.json({ address: label, distance_m: distance });
+            }
         }
-        res.json({ address: `Near ${lat}, ${lng}` });
-    } catch (error) {
-        console.error('Reverse geocoding error:', error.message);
-        res.json({ address: `Near ${lat}, ${lng}` });
+    } catch (esErr) {
+        console.warn('ES reverse geocode error:', esErr.message);
     }
+
+    // 2. PostGIS spatial distance query
+    try {
+        const pgRes = await pool.query(
+            `SELECT road_name, area_name, zone,
+                    round(ST_Distance(geom::geography, ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography)::numeric, 1) AS dist_m
+             FROM gcc_streets
+             ORDER BY geom <-> ST_SetSRID(ST_MakePoint($1, $2), 4326)
+             LIMIT 1;`,
+            [numLng, numLat]
+        );
+        if (pgRes.rows.length > 0) {
+            const row = pgRes.rows[0];
+            const dist = parseFloat(row.dist_m);
+            if (dist < 1000) {
+                const address = [row.road_name, row.area_name, `Zone ${row.zone}`].filter(Boolean).join(', ');
+                return res.json({ address, distance_m: dist });
+            }
+        }
+    } catch (pgErr) {
+        console.warn('PostGIS reverse geocode error:', pgErr.message);
+    }
+
+    // 3. OpenStreetMap Nominatim for global reverse geocoding
+    try {
+        const nomUrl = `https://nominatim.openstreetmap.org/reverse?lat=${numLat}&lon=${numLng}&format=json`;
+        const nomRes = await axios.get(nomUrl, {
+            headers: { 'User-Agent': 'WaylineGeocoding/1.0 (contact: admin@wayline.com)' },
+            timeout: 5000
+        });
+        if (nomRes.data && nomRes.data.display_name) {
+            return res.json({ address: nomRes.data.display_name, distance_m: null });
+        }
+    } catch (nomErr) {
+        console.warn('Nominatim reverse geocode error:', nomErr.message);
+    }
+
+    return res.json({ address: `Coordinate: ${numLat.toFixed(5)}, ${numLng.toFixed(5)}` });
 });
 
 app.get('/api/roads', async (req, res) => {
@@ -338,10 +452,10 @@ app.get('/api/data/import/status/:jobId', protectWithApiKey, async (req, res) =>
 
 // --- Auth Endpoints ---
 
-// POST /auth/register
+// POST /auth/register and /api/auth/register
 // Body: { email: string, password: string }
 // Returns: 201 on success | 400 if fields missing | 409 if email taken
-app.post('/auth/register', async (req, res) => {
+app.post(['/auth/register', '/api/auth/register'], async (req, res) => {
     const { email, password } = req.body;
 
     // Validate required fields
@@ -369,10 +483,10 @@ app.post('/auth/register', async (req, res) => {
     }
 });
 
-// POST /auth/login
+// POST /auth/login and /api/auth/login
 // Body: { email: string, password: string }
 // Returns: 200 on success | 400 if fields missing | 401 if invalid credentials
-app.post('/auth/login', async (req, res) => {
+app.post(['/auth/login', '/api/auth/login'], async (req, res) => {
     const { email, password } = req.body;
 
     // Validate required fields

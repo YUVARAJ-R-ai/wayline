@@ -91,12 +91,28 @@ interface RecentRouteItem {
   timestamp: number;
 }
 
+// Helper to parse coordinate string "lat, lng"
+function parseCoords(str: string): [number, number] | null {
+  const match = str.trim().match(/^([-+]?\d+(?:\.\d+)?)[,\s]+([-+]?\d+(?:\.\d+)?)$/);
+  if (match) {
+    const lat = parseFloat(match[1]);
+    const lng = parseFloat(match[2]);
+    if (!isNaN(lat) && !isNaN(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+      return [lat, lng];
+    }
+  }
+  return null;
+}
+
 export default function RoutingMap() {
   // Mode: "route" vs "geocode"
   const [activeTab, setActiveTab] = useState<"route" | "geocode">("route");
   const [routingProfile, setRoutingProfile] = useState<RoutingProfile>("car");
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [locatingUser, setLocatingUser] = useState(false);
+
+  // Active target for map clicks: 'from' | 'to' | checkpointId | null
+  const [activeTarget, setActiveTarget] = useState<string | null>("from");
 
   // Routing Origin, Destination, and Checkpoints
   const [fromQuery, setFromQuery] = useState("");
@@ -220,19 +236,25 @@ export default function RoutingMap() {
       setToastMessage("Maximum 5 intermediate checkpoints reached.");
       return;
     }
+    const newId = `cp-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`;
     const newCheckpoint: CheckpointItem = {
-      id: `cp-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+      id: newId,
       query: "",
       coord: null,
       address: null,
     };
     setCheckpoints((prev) => [...prev, newCheckpoint]);
+    setActiveTarget(newId);
     setRoutePoints([]);
     setInfo(null);
+    setToastMessage(`Stop #${checkpoints.length + 1} added. Click map or type address.`);
   };
 
   const handleRemoveCheckpoint = (id: string) => {
     setCheckpoints((prev) => prev.filter((c) => c.id !== id));
+    if (activeTarget === id) {
+      setActiveTarget(null);
+    }
     setRoutePoints([]);
     setInfo(null);
   };
@@ -245,35 +267,83 @@ export default function RoutingMap() {
     setInfo(null);
   };
 
-  // Map Click Handler: Set Origin -> Checkpoints -> Destination
+  // Map Click Handler: Targets explicit active input or sequential slot
   const handleMapClick = (latlng: { lat: number; lng: number }) => {
     const coords: [number, number] = [latlng.lat, latlng.lng];
     const formatted = `${latlng.lat.toFixed(5)}, ${latlng.lng.toFixed(5)}`;
 
-    // Clear stale route whenever map points change
     setRoutePoints([]);
     setInfo(null);
 
+    // 1. If explicit checkpoint target is active
+    if (activeTarget && activeTarget.startsWith("cp-")) {
+      const targetId = activeTarget;
+      setCheckpoints((prev) =>
+        prev.map((c) => (c.id === targetId ? { ...c, coord: coords, address: formatted, query: formatted } : c))
+      );
+      setToastMessage("Stop placed on map");
+      const currentIdx = checkpoints.findIndex((c) => c.id === targetId);
+      const nextUnfilled = checkpoints.find((c, i) => i > currentIdx && !c.coord);
+      setActiveTarget(nextUnfilled ? nextUnfilled.id : !toCoord ? "to" : null);
+      return;
+    }
+
+    // 2. If explicit 'from' target is active
+    if (activeTarget === "from") {
+      setFromCoord(coords);
+      setFromAddress(formatted);
+      setFromQuery(formatted);
+      setToastMessage("Origin placed on map");
+      const nextCp = checkpoints.find((c) => !c.coord);
+      setActiveTarget(nextCp ? nextCp.id : !toCoord ? "to" : null);
+      return;
+    }
+
+    // 3. If explicit 'to' target is active
+    if (activeTarget === "to") {
+      setToCoord(coords);
+      setToAddress(formatted);
+      setToQuery(formatted);
+      setToastMessage("Destination placed on map");
+      setActiveTarget(null);
+      return;
+    }
+
+    // 4. Sequential fallback
     if (!fromCoord) {
       setFromCoord(coords);
       setFromAddress(formatted);
       setFromQuery(formatted);
-      setToastMessage("Origin set. Click map for destination.");
-    } else if (!toCoord) {
-      setToCoord(coords);
-      setToAddress(formatted);
-      setToQuery(formatted);
-      setToastMessage("Destination set. Click 'Calculate Route' to navigate.");
+      setToastMessage("Origin placed on map");
+      const nextCp = checkpoints.find((c) => !c.coord);
+      setActiveTarget(nextCp ? nextCp.id : "to");
     } else {
-      // If both were set, start a fresh route selection with new origin
-      setFromCoord(coords);
-      setFromAddress(formatted);
-      setFromQuery(formatted);
-      setToCoord(null);
-      setToAddress(null);
-      setToQuery("");
-      setCheckpoints([]);
-      setToastMessage("New origin set. Click map for destination.");
+      const unfilledCp = checkpoints.find((c) => !c.coord);
+      if (unfilledCp) {
+        setCheckpoints((prev) =>
+          prev.map((c) => (c.id === unfilledCp.id ? { ...c, coord: coords, address: formatted, query: formatted } : c))
+        );
+        setToastMessage("Stop placed on map");
+        const nextRemaining = checkpoints.find((c) => c.id !== unfilledCp.id && !c.coord);
+        setActiveTarget(nextRemaining ? nextRemaining.id : !toCoord ? "to" : null);
+      } else if (!toCoord) {
+        setToCoord(coords);
+        setToAddress(formatted);
+        setToQuery(formatted);
+        setToastMessage("Destination placed on map. Ready to calculate route.");
+        setActiveTarget(null);
+      } else {
+        // Reset and set new Origin
+        setFromCoord(coords);
+        setFromAddress(formatted);
+        setFromQuery(formatted);
+        setToCoord(null);
+        setToAddress(null);
+        setToQuery("");
+        setCheckpoints([]);
+        setActiveTarget("to");
+        setToastMessage("New origin set. Click map for destination.");
+      }
     }
   };
 
@@ -496,7 +566,13 @@ export default function RoutingMap() {
 
     try {
       // 1. Resolve Origin
-      if (!activeFrom || fromQuery !== activeFromAddress) {
+      const fromParsed = parseCoords(fromQuery);
+      if (fromParsed) {
+        activeFrom = fromParsed;
+        activeFromAddress = fromQuery;
+        setFromCoord(fromParsed);
+        setFromAddress(fromQuery);
+      } else if (!activeFrom || fromQuery !== activeFromAddress) {
         const res = await fetch(`${apiBaseUrl}/api/geocode?q=${encodeURIComponent(fromQuery)}`, { headers });
         if (!res.ok) throw new Error("Failed to resolve start address");
         const data = await res.json();
@@ -512,26 +588,47 @@ export default function RoutingMap() {
       // 2. Resolve intermediate checkpoints
       const resolvedCheckpoints: CheckpointItem[] = [];
       for (const cp of checkpoints) {
-        if (cp.query.trim()) {
+        if (cp.query.trim() || cp.coord) {
           let cpCoord = cp.coord;
           let cpAddress = cp.address;
-          if (!cpCoord || cp.query !== cpAddress) {
-            const res = await fetch(`${apiBaseUrl}/api/geocode?q=${encodeURIComponent(cp.query)}`, { headers });
-            if (res.ok) {
-              const data = await res.json();
-              if (data && typeof data.lat === "number" && typeof data.lng === "number") {
-                cpCoord = [data.lat, data.lng];
-                cpAddress = data.address || cp.query;
+
+          if (cp.query.trim()) {
+            const parsed = parseCoords(cp.query);
+            if (parsed) {
+              cpCoord = parsed;
+              cpAddress = cp.query.trim();
+            } else if (!cpCoord || cp.query !== cpAddress) {
+              const res = await fetch(`${apiBaseUrl}/api/geocode?q=${encodeURIComponent(cp.query)}`, { headers });
+              if (res.ok) {
+                const data = await res.json();
+                if (data && typeof data.lat === "number" && typeof data.lng === "number") {
+                  cpCoord = [data.lat, data.lng];
+                  cpAddress = data.address || cp.query;
+                }
               }
             }
           }
-          resolvedCheckpoints.push({ ...cp, coord: cpCoord, address: cpAddress });
+
+          if (cpCoord) {
+            resolvedCheckpoints.push({
+              ...cp,
+              coord: cpCoord,
+              address: cpAddress || `${cpCoord[0].toFixed(5)}, ${cpCoord[1].toFixed(5)}`,
+              query: cpAddress || cp.query || `${cpCoord[0].toFixed(5)}, ${cpCoord[1].toFixed(5)}`,
+            });
+          }
         }
       }
       setCheckpoints(resolvedCheckpoints);
 
       // 3. Resolve Destination
-      if (!activeTo || toQuery !== activeToAddress) {
+      const toParsed = parseCoords(toQuery);
+      if (toParsed) {
+        activeTo = toParsed;
+        activeToAddress = toQuery;
+        setToCoord(toParsed);
+        setToAddress(toQuery);
+      } else if (!activeTo || toQuery !== activeToAddress) {
         const res = await fetch(`${apiBaseUrl}/api/geocode?q=${encodeURIComponent(toQuery)}`, { headers });
         if (!res.ok) throw new Error("Failed to resolve destination address");
         const data = await res.json();
@@ -704,11 +801,21 @@ export default function RoutingMap() {
             <div className="space-y-2 relative">
                 
                 {/* 1. Origin Input */}
-                <div className="space-y-1">
+                <div className={`space-y-1 p-1.5 rounded-xl transition-all ${
+                  activeTarget === "from" ? "bg-accent-purple/5 ring-1 ring-accent-purple/40" : ""
+                }`}>
                   <div className="flex items-center justify-between text-[11px]">
-                    <label className="font-semibold text-text-secondary flex items-center gap-1.5">
+                    <label 
+                      onClick={() => setActiveTarget("from")}
+                      className="font-semibold text-text-secondary flex items-center gap-1.5 cursor-pointer"
+                    >
                       <span className="w-2 h-2 rounded-full bg-status-success inline-block" />
                       <span>Origin</span>
+                      {activeTarget === "from" && (
+                        <span className="text-[9px] text-accent-purple bg-accent-purple/10 px-1 py-0.2 rounded font-normal">
+                          Click Map to Place
+                        </span>
+                      )}
                     </label>
                     <button
                       type="button"
@@ -724,19 +831,37 @@ export default function RoutingMap() {
                     type="text"
                     placeholder="Click map or enter start..."
                     value={fromQuery}
+                    onFocus={() => setActiveTarget("from")}
                     onChange={(e) => setFromQuery(e.target.value)}
                     onKeyDown={(e) => e.key === "Enter" && handleGetRoute()}
-                    className="w-full rounded-xl bg-bg-base border border-border-default py-2 px-3 text-xs text-text-primary placeholder:text-text-muted outline-none focus:border-accent-purple transition-colors"
+                    className={`w-full rounded-xl bg-bg-base border py-2 px-3 text-xs text-text-primary placeholder:text-text-muted outline-none transition-colors ${
+                      activeTarget === "from"
+                        ? "border-accent-purple shadow-sm shadow-accent-purple/10"
+                        : "border-border-default focus:border-accent-purple"
+                    }`}
                   />
                 </div>
 
                 {/* 2. Dynamic Intermediate Checkpoints */}
                 {checkpoints.map((cp, idx) => (
-                  <div key={cp.id} className="space-y-1 animate-in fade-in slide-in-from-top-1 duration-150">
+                  <div 
+                    key={cp.id} 
+                    className={`space-y-1 p-1.5 rounded-xl animate-in fade-in slide-in-from-top-1 duration-150 transition-all ${
+                      activeTarget === cp.id ? "bg-status-warning/5 ring-1 ring-status-warning/40" : ""
+                    }`}
+                  >
                     <div className="flex items-center justify-between text-[11px]">
-                      <label className="font-semibold text-status-warning flex items-center gap-1.5">
+                      <label 
+                        onClick={() => setActiveTarget(cp.id)}
+                        className="font-semibold text-status-warning flex items-center gap-1.5 cursor-pointer"
+                      >
                         <span className="w-2 h-2 rounded-full bg-status-warning inline-block" />
                         <span>Stop #{idx + 1}</span>
+                        {activeTarget === cp.id && (
+                          <span className="text-[9px] text-status-warning bg-status-warning/15 px-1 py-0.2 rounded font-normal">
+                            Click Map to Place
+                          </span>
+                        )}
                       </label>
                       <button
                         type="button"
@@ -750,17 +875,22 @@ export default function RoutingMap() {
                     </div>
                     <input
                       type="text"
-                      placeholder={`Enter Stop #${idx + 1} address or location...`}
+                      placeholder={`Enter Stop #${idx + 1} address or click map...`}
                       value={cp.query}
+                      onFocus={() => setActiveTarget(cp.id)}
                       onChange={(e) => handleCheckpointChange(cp.id, e.target.value)}
                       onKeyDown={(e) => e.key === "Enter" && handleGetRoute()}
-                      className="w-full rounded-xl bg-bg-base border border-status-warning/40 py-2 px-3 text-xs text-text-primary placeholder:text-text-muted outline-none focus:border-status-warning transition-colors"
+                      className={`w-full rounded-xl bg-bg-base border py-2 px-3 text-xs text-text-primary placeholder:text-text-muted outline-none transition-colors ${
+                        activeTarget === cp.id
+                          ? "border-status-warning shadow-sm shadow-status-warning/10"
+                          : "border-status-warning/40 focus:border-status-warning"
+                      }`}
                     />
                   </div>
                 ))}
 
                 {/* Add Checkpoint Button */}
-                <div className="flex items-center justify-between pt-0.5">
+                <div className="flex items-center justify-between pt-0.5 px-1">
                   <button
                     type="button"
                     onClick={handleAddCheckpoint}
@@ -782,20 +912,35 @@ export default function RoutingMap() {
                 </div>
 
                 {/* 3. Destination Input */}
-                <div className="space-y-1 pt-0.5">
+                <div className={`space-y-1 p-1.5 rounded-xl transition-all ${
+                  activeTarget === "to" ? "bg-status-error/5 ring-1 ring-status-error/40" : ""
+                }`}>
                   <div className="flex items-center justify-between text-[11px]">
-                    <label className="font-semibold text-text-secondary flex items-center gap-1.5">
+                    <label 
+                      onClick={() => setActiveTarget("to")}
+                      className="font-semibold text-text-secondary flex items-center gap-1.5 cursor-pointer"
+                    >
                       <span className="w-2 h-2 rounded-full bg-status-error inline-block" />
                       <span>Destination</span>
+                      {activeTarget === "to" && (
+                        <span className="text-[9px] text-status-error bg-status-error/10 px-1 py-0.2 rounded font-normal">
+                          Click Map to Place
+                        </span>
+                      )}
                     </label>
                   </div>
                   <input
                     type="text"
                     placeholder="Click map or enter destination..."
                     value={toQuery}
+                    onFocus={() => setActiveTarget("to")}
                     onChange={(e) => setToQuery(e.target.value)}
                     onKeyDown={(e) => e.key === "Enter" && handleGetRoute()}
-                    className="w-full rounded-xl bg-bg-base border border-border-default py-2 px-3 text-xs text-text-primary placeholder:text-text-muted outline-none focus:border-accent-purple transition-colors"
+                    className={`w-full rounded-xl bg-bg-base border py-2 px-3 text-xs text-text-primary placeholder:text-text-muted outline-none transition-colors ${
+                      activeTarget === "to"
+                        ? "border-status-error shadow-sm shadow-status-error/10"
+                        : "border-border-default focus:border-accent-purple"
+                    }`}
                   />
                 </div>
               </div>

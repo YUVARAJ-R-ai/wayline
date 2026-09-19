@@ -12,6 +12,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY normalizer.py .
+COPY llm_normalizer.py .
 COPY server.py .
 
 # Default entrypoint is the one-shot CLI loader (used by smoke-test.sh and manual

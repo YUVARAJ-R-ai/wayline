@@ -18,6 +18,20 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Missing search query "q".' }, { status: 400 });
   }
 
+  // Fast-path: Direct coordinate format (lat, lng)
+  const coordMatch = q.trim().match(/^([-+]?\d+(?:\.\d+)?)[,\s]+([-+]?\d+(?:\.\d+)?)$/);
+  if (coordMatch) {
+    const lat = parseFloat(coordMatch[1]);
+    const lng = parseFloat(coordMatch[2]);
+    if (!isNaN(lat) && !isNaN(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+      return NextResponse.json({
+        lat,
+        lng,
+        address: `${lat.toFixed(5)}, ${lng.toFixed(5)}`,
+      });
+    }
+  }
+
   const backendUrl = process.env.BACKEND_URL || "http://localhost:3000";
   const apiKey = req.headers.get("x-api-key");
   recordKeyUsage(apiKey);
