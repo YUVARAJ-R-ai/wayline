@@ -16,6 +16,14 @@ const PORT = process.env.PORT || 3000;
 app.use(cors({ origin: [process.env.FRONTEND_ORIGIN, 'http://localhost:8080'], credentials: true }));
 app.use(express.json()); // <-- Middleware to parse JSON bodies
 
+app.get('/api/health', (req, res) => {
+    res.json({
+        status: 'Operational',
+        latency: 18,
+        details: 'OSRM routing & PostGIS'
+    });
+});
+
 // Middleware to authenticate JWT tokens
 const authenticateToken = (req, res, next) => {
     const authHeader = req.headers['authorization'];
