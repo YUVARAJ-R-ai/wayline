@@ -18,25 +18,35 @@
 #   PG_DB         (default: wayline)
 set -euo pipefail
 
-ZIP="${1:-/data/vault/project_archive/maps-api/GCC_Streets.zip}"
+# Fallback search paths for GCC shapefile or zip
+SHP_SRC="${1:-}"
+if [[ -z "$SHP_SRC" ]]; then
+  if [[ -f "./GCRoad_Network/GCRoad_Network.shp" ]]; then
+    SHP_SRC="./GCRoad_Network/GCRoad_Network.shp"
+  elif [[ -f "/data/vault/project_archive/maps-api/GCC_Streets.zip" ]]; then
+    SHP_SRC="/data/vault/project_archive/maps-api/GCC_Streets.zip"
+  fi
+fi
 PG_CONTAINER="${PG_CONTAINER:-postgres_database}"
 PG_USER="${PG_USER:-admin}"
 PG_DB="${PG_DB:-wayline}"
 
-if [[ ! -f "$ZIP" ]]; then
-  echo "ERROR: dataset not found at $ZIP" >&2
+if [[ -z "$SHP_SRC" || ! -e "$SHP_SRC" ]]; then
+  echo "ERROR: dataset not found at $SHP_SRC" >&2
   exit 1
 fi
 
-echo "==> Extracting $ZIP"
-WORK="$(mktemp -d)"
-trap 'rm -rf "$WORK"' EXIT
-python3 -c "import zipfile,sys; zipfile.ZipFile('$ZIP').extractall('$WORK')"
-
-# Find the .shp regardless of casing inside the archive.
-SHP="$(find "$WORK" -iname '*.shp' | head -n1)"
-BASE="${SHP%.*}"
-if [[ -z "$SHP" ]]; then echo "ERROR: no .shp in archive" >&2; exit 1; fi
+BASE=""
+if [[ "$SHP_SRC" =~ \.zip$ ]]; then
+  echo "==> Extracting $SHP_SRC"
+  WORK="$(mktemp -d)"
+  trap 'rm -rf "$WORK"' EXIT
+  python3 -c "import zipfile,sys; zipfile.ZipFile('$SHP_SRC').extractall('$WORK')"
+  SHP="$(find "$WORK" -iname '*.shp' | head -n1)"
+  BASE="${SHP%.*}"
+else
+  BASE="${SHP_SRC%.*}"
+fi
 
 echo "==> Copying shapefile into $PG_CONTAINER"
 docker exec "$PG_CONTAINER" mkdir -p /tmp/gcc

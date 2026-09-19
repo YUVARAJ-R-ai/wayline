@@ -1,0 +1,151 @@
+<svg width="320" height="150" viewBox="0 0 320 150" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <!-- Left Sand/Stone Ribbon Gradient -->
+    <linearGradient id="ribbonStoneGrad" x1="20%" y1="20%" x2="80%" y2="100%">
+      <stop offset="0%" stop-color="#DAD7C7" />
+      <stop offset="45%" stop-color="#C2C0B0" />
+      <stop offset="85%" stop-color="#8B9B89" />
+      <stop offset="100%" stop-color="#728271" />
+    </linearGradient>
+
+    <!-- Wave Crest Light Surface -->
+    <linearGradient id="crestGrad" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#8B9B89" />
+      <stop offset="40%" stop-color="#DAD7C7" />
+      <stop offset="85%" stop-color="#E5E3D8" />
+      <stop offset="100%" stop-color="#C2C0B0" />
+    </linearGradient>
+
+    <!-- Under-fold Dark Green Depth Gradient -->
+    <linearGradient id="underfoldGrad" x1="20%" y1="0%" x2="80%" y2="100%">
+      <stop offset="0%" stop-color="#0B0F0D" />
+      <stop offset="35%" stop-color="#1A261C" />
+      <stop offset="70%" stop-color="#233527" />
+      <stop offset="100%" stop-color="#2C4032" />
+    </linearGradient>
+
+    <!-- Right Sage/Forest Arch Leg Gradient -->
+    <linearGradient id="rightLegGrad" x1="20%" y1="0%" x2="80%" y2="100%">
+      <stop offset="0%" stop-color="#557563" />
+      <stop offset="30%" stop-color="#436352" />
+      <stop offset="70%" stop-color="#324D3E" />
+      <stop offset="100%" stop-color="#1F2F24" />
+    </linearGradient>
+
+    <!-- Compass Star Light & Shadow Facet Gradients -->
+    <linearGradient id="starLight" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF" />
+      <stop offset="60%" stop-color="#F6F4EB" />
+      <stop offset="100%" stop-color="#DAD7C7" />
+    </linearGradient>
+
+    <linearGradient id="starDark" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#8B9B89" />
+      <stop offset="50%" stop-color="#436352" />
+      <stop offset="100%" stop-color="#1F2A1F" />
+    </linearGradient>
+
+    <!-- Subtle Topographic Contour Pattern -->
+    <pattern id="topoLines" width="30" height="30" patternUnits="userSpaceOnUse">
+      <path d="M 0 10 Q 7 4, 15 10 T 30 10 M 0 20 Q 7 14, 15 20 T 30 20" fill="none" stroke="#FFFFFF" stroke-width="0.75" stroke-opacity="0.18" />
+    </pattern>
+
+    <!-- Noise / Texture Filter -->
+    <filter id="subtleNoise" x="0%" y="0%" width="100%" height="100%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.04" numOctaves="3" result="noise" />
+      <feColorMatrix type="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 0.08 0" in="noise" result="coloredNoise" />
+      <feComposite operator="in" in="coloredNoise" in2="SourceGraphic" result="textured" />
+      <feBlend mode="overlay" in="SourceGraphic" in2="textured" />
+    </filter>
+  </defs>
+
+  <g id="wayline-brand-mark">
+    <!-- 1. LEFTMOST DIAGONAL ARM (W-Stroke 1) -->
+    <!-- Outer flat-cut top slanting down-right to rounded bottom heel -->
+    <path
+      d="M 36 42 L 72 42 L 108 108 C 104 116, 94 122, 85 120 C 76 118, 70 110, 66 104 L 36 42 Z"
+      fill="url(#ribbonStoneGrad)"
+      filter="url(#subtleNoise)"
+    />
+    <!-- Topographic lines on left arm -->
+    <path
+      d="M 36 42 L 72 42 L 108 108 C 104 116, 94 122, 85 120 C 76 118, 70 110, 66 104 L 36 42 Z"
+      fill="url(#topoLines)"
+    />
+
+    <!-- 2. MIDDLE RISING WAVE & 3D FOLD (W-Stroke 2) -->
+    <!-- Upward sweeping curve starting from bottom-left corner and cresting into the middle hill -->
+    <path
+      d="M 85 126 C 98 126, 114 110, 126 90 L 144 58 C 150 48, 158 50, 163 56 L 167 62 C 160 55, 152 56, 147 64 L 128 98 C 117 118, 102 134, 85 126 Z"
+      fill="url(#crestGrad)"
+      filter="url(#subtleNoise)"
+    />
+    <path
+      d="M 85 126 C 98 126, 114 110, 126 90 L 144 58 C 150 48, 158 50, 163 56 L 167 62 C 160 55, 152 56, 147 64 L 128 98 C 117 118, 102 134, 85 126 Z"
+      fill="url(#topoLines)"
+    />
+
+    <!-- 3. UNDER-FOLD VALLEY (Dark Forest underside of the ribbon) -->
+    <path
+      d="M 148 64 C 153 56, 160 56, 166 62 L 176 76 C 182 86, 172 112, 150 112 C 138 112, 132 102, 138 92 L 148 64 Z"
+      fill="url(#underfoldGrad)"
+    />
+
+    <!-- 4. RIGHT ARCH & DESCENDING LEG (The Green Mountain & Apex) -->
+    <path
+      d="M 163 76 C 172 60, 192 24, 214 24 C 228 24, 236 34, 240 46 L 278 122 C 280 128, 274 134, 264 132 C 256 130, 252 122, 248 114 L 218 52 C 215 46, 208 44, 202 50 L 172 84 C 166 88, 161 84, 163 76 Z"
+      fill="url(#rightLegGrad)"
+      filter="url(#subtleNoise)"
+    />
+    <path
+      d="M 163 76 C 172 60, 192 24, 214 24 C 228 24, 236 34, 240 46 L 278 122 C 280 128, 274 134, 264 132 C 256 130, 252 122, 248 114 L 218 52 C 215 46, 208 44, 202 50 L 172 84 C 166 88, 161 84, 163 76 Z"
+      fill="url(#topoLines)"
+    />
+
+    <!-- 5. WAYLINE TRACK & PIN (Cream Spine Path rising from the valley into the Apex circle) -->
+    <!-- The luminous route path with subtle bevel shadow -->
+    <path
+      d="M 163 88 C 170 78, 196 46, 212 36"
+      stroke="#141C16"
+      stroke-width="5"
+      stroke-linecap="round"
+      opacity="0.6"
+    />
+    <path
+      d="M 163 88 C 170 78, 196 46, 212 36"
+      stroke="#F6F4EB"
+      stroke-width="3"
+      stroke-linecap="round"
+    />
+
+    <!-- Waypoint Apex Target Node -->
+    <g transform="translate(214, 34)">
+      <!-- Dark Collar Ring around Node -->
+      <circle cx="0" cy="0" r="10" fill="#0E1611" stroke="#2D4336" stroke-width="1.5" />
+      <!-- Solid Bright Cream Center Target Pin -->
+      <circle cx="0" cy="0" r="5.5" fill="#F6F4EB" />
+    </g>
+
+    <!-- 6. 4-POINT FACETED COMPASS STAR ✦ (Top Right) -->
+    <g transform="translate(258, 22)">
+      <!-- Top Ray: Right Facet (Bright), Left Facet (Shaded) -->
+      <polygon points="0,0 0,-18 3.5,-3" fill="url(#starLight)" />
+      <polygon points="0,0 0,-18 -3.5,-3" fill="url(#starDark)" />
+
+      <!-- Bottom Ray: Left Facet (Bright), Right Facet (Shaded) -->
+      <polygon points="0,0 0,18 -3.5,3" fill="url(#starLight)" />
+      <polygon points="0,0 0,18 3.5,3" fill="url(#starDark)" />
+
+      <!-- Right Ray: Top Facet (Bright), Bottom Facet (Shaded) -->
+      <polygon points="0,0 16,0 3,-3.5" fill="url(#starLight)" />
+      <polygon points="0,0 16,0 3,3.5" fill="url(#starDark)" />
+
+      <!-- Left Ray: Bottom Facet (Bright), Top Facet (Shaded) -->
+      <polygon points="0,0 -16,0 -3,3.5" fill="url(#starLight)" />
+      <polygon points="0,0 -16,0 -3,-3.5" fill="url(#starDark)" />
+
+      <!-- Center Sparkle Core -->
+      <circle cx="0" cy="0" r="1.5" fill="#FFFFFF" />
+    </g>
+  </g>
+</svg>

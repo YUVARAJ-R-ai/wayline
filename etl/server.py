@@ -22,8 +22,11 @@ import uuid
 from flask import Flask, request, jsonify
 
 import normalizer
+from llm_normalizer import LLMNormalizer
 
 app = Flask(__name__)
+
+llm_normalizer = LLMNormalizer()
 
 ES_URL = os.environ.get("ES_URL", "http://elasticsearch:9200")
 GEO_INDEX = os.environ.get("GEO_INDEX", "wayline_geo")
@@ -62,7 +65,31 @@ def _run_job(job_id, abs_path, index_name, recreate):
 
 @app.get("/health")
 def health():
-    return jsonify(status="ok", index=GEO_INDEX, import_dir=IMPORT_DATA_DIR)
+    return jsonify(
+        status="ok",
+        index=GEO_INDEX,
+        import_dir=IMPORT_DATA_DIR,
+        llm_engine=llm_normalizer.model,
+        ollama_url=llm_normalizer.ollama_url,
+    )
+
+
+@app.post("/normalize")
+def normalize_endpoint():
+    """Normalize raw text or batch records using hybrid LLM routing."""
+    body = request.get_json(silent=True) or {}
+    text = body.get("text")
+    records = body.get("records")
+
+    if text is not None:
+        result = llm_normalizer.route_and_process(text)
+        return jsonify(result)
+
+    if isinstance(records, list):
+        results = [llm_normalizer.route_and_process(r) for r in records]
+        return jsonify(results=results, count=len(results))
+
+    return jsonify(error="Expected 'text' (string) or 'records' (array of strings/objects)"), 400
 
 
 @app.post("/run")

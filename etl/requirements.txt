@@ -4,3 +4,4 @@ fiona==1.9.5
 shapely==2.0.3
 elasticsearch==8.13.0
 flask==3.0.3
+requests==2.31.0

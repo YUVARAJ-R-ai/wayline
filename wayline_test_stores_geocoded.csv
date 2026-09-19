@@ -1,0 +1,11 @@
+store_id,name,latitude,longitude,category,city,status,contact
+WAY-001,Wayline Flagship Tech Hub,13.0827,80.2707,Headquarters,Chennai,Active,+91 44 2855 0101
+WAY-002,Guindy Dispatch Terminal,13.0067,80.2024,Logistics Depot,Chennai,Active,+91 44 2235 0202
+WAY-003,OMR Cyber Corridor Point,12.9249,80.2279,Express Locker,Chennai,Active,+91 44 2450 0303
+WAY-004,Marina Beach Coast Station,13.0500,80.2824,IoT Sensor,Chennai,Active,+91 44 2844 0404
+WAY-005,T. Nagar Retail Hub,13.0418,80.2341,Superstore,Chennai,Active,+91 44 2434 0505
+WAY-006,Anna Nagar Distribution Depot,13.0850,80.2100,Fulfillment,Chennai,Active,+91 44 2626 0606
+WAY-007,Adyar River Transit Point,13.0012,80.2565,Micro-Hub,Chennai,Active,+91 44 2441 0707
+WAY-008,Velachery South Logistics,12.9815,80.2180,Depot,Chennai,Active,+91 44 2243 0808
+WAY-009,Koyambedu Gateway Depot,13.0694,80.1948,Transit Terminal,Chennai,Active,+91 44 2479 0909
+WAY-010,Chennai Port Maritime Gate,13.0945,80.2985,Cargo Gate,Chennai,Active,+91 44 2536 1010
